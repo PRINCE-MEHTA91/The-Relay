@@ -1,4 +1,4 @@
-"""Task 9: Research question answering using FAISS retrieval and Groq LLM."""
+""" Research question answering using FAISS retrieval and Groq LLM."""
 
 import os
 import sys
@@ -95,13 +95,7 @@ def answer_question(
     top_k: int = DEFAULT_TOP_K,
     model_override: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Complete RAG workflow:
-    1. Retrieve top passages with FAISS
-    2. Build context-grounded prompt
-    3. Query Groq LLM with retries
-    4. Return structured response with citations and metrics
-    """
+    """Retrieve top passages with FAISS, query LLM, and validate citations."""
     overall_start = time.perf_counter()
 
     if not question or not question.strip():
@@ -201,6 +195,7 @@ def answer_question(
         "retrieved_chunks": retrieved_chunks,
         "input_tokens": groq_res["input_tokens"],
         "output_tokens": groq_res["output_tokens"],
+        "retries_attempted": groq_res.get("retries_attempted", 0),
         "latency_ms": total_latency,
         "status": status,
     }

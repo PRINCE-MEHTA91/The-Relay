@@ -1,4 +1,4 @@
-"""Task 8: Groq API client with retry handling, exponential backoff, and metrics."""
+"""Task 8: Groq API client with token budget enforcement, configurable timeout, and exponential retries."""
 
 import os
 import time
@@ -8,17 +8,34 @@ from dotenv import load_dotenv
 import groq
 from groq import Groq
 
-# Load environment variables from .env
 load_dotenv()
 
-# Config defaults
+# Configurable token limits and retry settings
 DEFAULT_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 DEFAULT_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.2"))
-DEFAULT_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "1024"))
+DEFAULT_MAX_INPUT_TOKENS = int(os.getenv("GROQ_MAX_INPUT_TOKENS", "4096"))
+DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("GROQ_MAX_OUTPUT_TOKENS", os.getenv("GROQ_MAX_TOKENS", "1024")))
+DEFAULT_TIMEOUT = float(os.getenv("GROQ_TIMEOUT_SECONDS", "30.0"))
+DEFAULT_MAX_RETRIES = int(os.getenv("GROQ_MAX_RETRIES", "3"))
+DEFAULT_INITIAL_RETRY_DELAY = float(os.getenv("GROQ_INITIAL_RETRY_DELAY", "1.0"))
+
+# In-memory cumulative token tracker for auditability
+CUMULATIVE_TOKEN_USAGE = {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "successful_requests": 0,
+    "failed_requests": 0,
+}
+
+
+def estimate_tokens(text: str) -> int:
+    """Estimate token count from text using standard word-ratio heuristic (~1.3 tokens per word)."""
+    return max(1, int(len(text.split()) * 1.3))
 
 
 def get_groq_client() -> Groq:
-    """Initialize and return the Groq client using API key from .env."""
+    """Initialize Groq client using API key from .env; raises ValueError if missing."""
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key or api_key == "your_groq_api_key_here":
         raise ValueError(
@@ -29,7 +46,7 @@ def get_groq_client() -> Groq:
 
 
 def get_available_models(client: Optional[Groq] = None) -> List[str]:
-    """Fetch the list of currently active model IDs from Groq."""
+    """Fetch active model IDs from Groq API."""
     if client is None:
         try:
             client = get_groq_client()
@@ -43,98 +60,138 @@ def send_chat_completion(
     messages: List[Dict[str, str]],
     model: Optional[str] = None,
     temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    client: Optional[Groq] = None,
+    max_output_tokens: Optional[int] = None,
+    max_input_tokens: Optional[int] = None,
+    timeout_seconds: Optional[float] = None,
+    max_retries: Optional[int] = None,
+    initial_delay: Optional[float] = None,
+    client: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Send messages to Groq with retries, exponential backoff, and latency tracking.
-    Handles rate limits (429), timeouts, connection errors, and server errors.
+    Send messages to Groq with token budget enforcement, timeout handling, and exponential retries.
+    Tracks exact token usage and never retries permanent errors (401, 400, 404).
     """
+    selected_model = model or os.getenv("GROQ_MODEL", DEFAULT_MODEL)
+    temp = DEFAULT_TEMPERATURE if temperature is None else temperature
+    out_tokens = DEFAULT_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
+    in_tokens_limit = DEFAULT_MAX_INPUT_TOKENS if max_input_tokens is None else max_input_tokens
+    req_timeout = DEFAULT_TIMEOUT if timeout_seconds is None else timeout_seconds
+    retries_limit = DEFAULT_MAX_RETRIES if max_retries is None else max_retries
+    delay_base = DEFAULT_INITIAL_RETRY_DELAY if initial_delay is None else initial_delay
+
+    start_time = time.perf_counter()
+
+    # 1. Input token budget pre-check
+    total_prompt_text = " ".join(m.get("content", "") for m in messages)
+    estimated_in_tokens = estimate_tokens(total_prompt_text)
+
+    if estimated_in_tokens > in_tokens_limit:
+        CUMULATIVE_TOKEN_USAGE["failed_requests"] += 1
+        return {
+            "content": "",
+            "input_tokens": estimated_in_tokens,
+            "output_tokens": 0,
+            "total_tokens": estimated_in_tokens,
+            "latency_ms": 0.0,
+            "retries_attempted": 0,
+            "model": selected_model,
+            "status": "error",
+            "error": f"Token budget exceeded: input has ~{estimated_in_tokens} tokens (max allowed: {in_tokens_limit}).",
+        }
+
+    # 2. Client acquisition
     if client is None:
         try:
             client = get_groq_client()
         except ValueError as ve:
+            CUMULATIVE_TOKEN_USAGE["failed_requests"] += 1
             return {
                 "content": "",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "total_tokens": 0,
                 "latency_ms": 0.0,
-                "model": model or DEFAULT_MODEL,
+                "retries_attempted": 0,
+                "model": selected_model,
                 "status": "error",
                 "error": str(ve),
             }
 
-    selected_model = model or os.getenv("GROQ_MODEL", DEFAULT_MODEL)
-    temp = DEFAULT_TEMPERATURE if temperature is None else temperature
-    tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens
-
-    start_time = time.perf_counter()
+    retries_done = 0
     last_error: Optional[Exception] = None
 
-    for attempt in range(max_retries + 1):
+    for attempt in range(retries_limit + 1):
         try:
             response = client.chat.completions.create(
                 model=selected_model,
                 messages=messages,
                 temperature=temp,
-                max_tokens=tokens,
+                max_tokens=out_tokens,
+                timeout=req_timeout,
             )
             elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
             usage = getattr(response, "usage", None)
-            input_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-            output_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-            total_tokens = getattr(usage, "total_tokens", 0) if usage else 0
+            actual_in = getattr(usage, "prompt_tokens", estimated_in_tokens) if usage else estimated_in_tokens
+            actual_out = getattr(usage, "completion_tokens", 0) if usage else 0
+            actual_total = getattr(usage, "total_tokens", actual_in + actual_out) if usage else actual_in
+
+            CUMULATIVE_TOKEN_USAGE["prompt_tokens"] += actual_in
+            CUMULATIVE_TOKEN_USAGE["completion_tokens"] += actual_out
+            CUMULATIVE_TOKEN_USAGE["total_tokens"] += actual_total
+            CUMULATIVE_TOKEN_USAGE["successful_requests"] += 1
 
             return {
                 "content": response.choices[0].message.content or "",
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": total_tokens,
+                "input_tokens": actual_in,
+                "output_tokens": actual_out,
+                "total_tokens": actual_total,
                 "latency_ms": elapsed_ms,
+                "retries_attempted": retries_done,
                 "model": selected_model,
                 "status": "success",
                 "error": None,
             }
 
         except groq.AuthenticationError as e:
-            # Fatal: invalid API key, retrying will not help
+            # Permanent error: invalid credentials must not be retried
             elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            CUMULATIVE_TOKEN_USAGE["failed_requests"] += 1
             return {
                 "content": "",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "total_tokens": 0,
                 "latency_ms": elapsed_ms,
+                "retries_attempted": retries_done,
                 "model": selected_model,
                 "status": "error",
                 "error": f"Authentication failed: Check your GROQ_API_KEY in .env. ({e})",
             }
 
-        except (groq.NotFoundError, groq.BadRequestError) as e:
-            # Fatal: invalid model name or prompt structure
+        except (groq.NotFoundError, groq.BadRequestError, groq.PermissionDeniedError, groq.UnprocessableEntityError) as e:
+            # Permanent error: bad model or payload must not be retried
             elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            CUMULATIVE_TOKEN_USAGE["failed_requests"] += 1
             return {
                 "content": "",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "total_tokens": 0,
                 "latency_ms": elapsed_ms,
+                "retries_attempted": retries_done,
                 "model": selected_model,
                 "status": "error",
-                "error": f"Request rejected ({type(e).__name__}): {e}",
+                "error": f"Permanent request error ({type(e).__name__}): {e}",
             }
 
-        except (groq.RateLimitError, groq.InternalServerError, groq.APITimeoutError, groq.APIConnectionError) as e:
+        except (groq.RateLimitError, groq.InternalServerError, groq.APITimeoutError, groq.APIConnectionError, TimeoutError) as e:
             last_error = e
-            if attempt < max_retries:
-                # Exponential backoff with small random jitter
-                backoff_delay = (initial_delay * (2 ** attempt)) + random.uniform(0.1, 0.5)
-                error_type = "Rate limit hit (429)" if isinstance(e, groq.RateLimitError) else type(e).__name__
-                print(f"  ⚠️  {error_type}: Retry {attempt + 1}/{max_retries} in {backoff_delay:.2f}s...")
+            if attempt < retries_limit:
+                retries_done += 1
+                backoff_delay = (delay_base * (2 ** attempt)) + random.uniform(0.1, 0.4)
+                err_label = "RateLimit (429)" if isinstance(e, groq.RateLimitError) else type(e).__name__
+                print(f"  ⚠️  Temporary error ({err_label}): Retry {retries_done}/{retries_limit} in {backoff_delay:.2f}s...")
                 time.sleep(backoff_delay)
             else:
                 break
@@ -143,52 +200,20 @@ def send_chat_completion(
             break
 
     elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    CUMULATIVE_TOKEN_USAGE["failed_requests"] += 1
     return {
         "content": "",
         "input_tokens": 0,
         "output_tokens": 0,
         "total_tokens": 0,
         "latency_ms": elapsed_ms,
+        "retries_attempted": retries_done,
         "model": selected_model,
         "status": "error",
-        "error": f"Request failed after {max_retries} retries ({type(last_error).__name__}): {last_error}",
+        "error": f"Request failed after {retries_done} retries ({type(last_error).__name__}): {last_error}",
     }
 
 
-def main():
-    """Verify Groq API connectivity and list available models."""
-    print("=" * 62)
-    print("  THE RELAY — Task 8: Groq API Integration Test")
-    print("=" * 62)
-
-    try:
-        client = get_groq_client()
-        print("🔍 Connecting to Groq and fetching available models...")
-        models = get_available_models(client)
-        print(f"✅ Connection successful! Found {len(models)} models.")
-        print(f"Top models: {', '.join(models[:4])}")
-
-        test_model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
-        print(f"\n🧪 Sending test ping using model: {test_model}")
-        res = send_chat_completion(
-            messages=[{"role": "user", "content": "Respond with 'The Relay is online' in 5 words or fewer."}],
-            model=test_model,
-            max_tokens=30,
-            client=client,
-        )
-
-        if res["status"] == "success":
-            print(f"✅ Response received in {res['latency_ms']} ms")
-            print(f"  Content: {res['content'].strip()}")
-            print(f"  Tokens : {res['input_tokens']} in / {res['output_tokens']} out")
-        else:
-            print(f"❌ Groq ping error: {res['error']}")
-
-    except ValueError as ve:
-        print(f"⚠️  Configuration warning: {ve}")
-    except Exception as e:
-        print(f"❌ Error testing Groq service: {e}")
-
-
-if __name__ == "__main__":
-    main()
+def get_token_metrics() -> Dict[str, int]:
+    """Return cumulative token usage and request counters."""
+    return dict(CUMULATIVE_TOKEN_USAGE)

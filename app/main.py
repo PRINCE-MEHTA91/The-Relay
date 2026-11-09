@@ -4,7 +4,7 @@ import os
 import sys
 import time
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 # Ensure project root is in python path
@@ -14,6 +14,7 @@ if ROOT_DIR not in sys.path:
 
 import answer_generator
 from mock_llm import MockMode, mock_service
+from rate_limiter import limiter, concurrency_manager
 
 # Initialize FastAPI application with OpenAPI metadata
 app = FastAPI(
@@ -65,6 +66,7 @@ class AskResponse(BaseModel):
     retrieved_chunks_count: int
     input_tokens: int
     output_tokens: int
+    retries_attempted: int = 0
     latency_ms: float
     status: str
 
@@ -104,11 +106,22 @@ def health():
         )
 
 
+@app.get("/metrics", status_code=status.HTTP_200_OK)
+def metrics():
+    """Return runtime concurrency and rate limiting statistics."""
+    stats = concurrency_manager.stats()
+    return {
+        "rate_limiter": {
+            "max_requests": limiter.max_requests,
+            "window_seconds": limiter.window_seconds,
+        },
+        "concurrency": stats,
+    }
+
+
 @app.post("/ask", response_model=AskResponse, status_code=status.HTTP_200_OK)
-async def ask(payload: AskRequest):
-    """
-    Answer a research question using RAG retrieval, LLM synthesis, and citation validation.
-    """
+async def ask(payload: AskRequest, request: Request, response: Response):
+    """Answer a research question with rate limiting and concurrency management."""
     clean_question = payload.question.strip()
     if not clean_question:
         raise HTTPException(
@@ -116,9 +129,35 @@ async def ask(payload: AskRequest):
             detail="Question cannot be empty or only whitespace.",
         )
 
+    # 1. Enforce sliding-window rate limit per client IP
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "127.0.0.1")
+    allowed, remaining, retry_after = await limiter.check_rate_limit(client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
+            headers={
+                "Retry-After": str(int(retry_after) + 1),
+                "X-RateLimit-Limit": str(limiter.max_requests),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(retry_after),
+            },
+        )
+
+    # 2. Enforce concurrency queue slot
+    acquired = await concurrency_manager.acquire()
+    if not acquired:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Server busy: request queue timed out waiting for an execution slot.",
+        )
+
     try:
+        response.headers["X-RateLimit-Limit"] = str(limiter.max_requests)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+
         if payload.use_mock or payload.mock_mode:
-            # Route through Mock LLM service
             start_t = time.perf_counter()
             model, index, metadata = answer_generator.load_retrieval_pipeline()
             import search_papers
@@ -157,11 +196,11 @@ async def ask(payload: AskRequest):
                 retrieved_chunks_count=len(chunks),
                 input_tokens=mock_res["input_tokens"],
                 output_tokens=mock_res["output_tokens"],
+                retries_attempted=mock_res.get("retries_attempted", 0),
                 latency_ms=total_lat,
                 status="verified" if val["is_valid"] else "unverified",
             )
         else:
-            # Route through standard RAG pipeline
             result = answer_generator.answer_question(
                 question=clean_question,
                 top_k=payload.top_k,
@@ -182,6 +221,7 @@ async def ask(payload: AskRequest):
                 retrieved_chunks_count=len(result["retrieved_chunks"]),
                 input_tokens=result["input_tokens"],
                 output_tokens=result["output_tokens"],
+                retries_attempted=result.get("retries_attempted", 0),
                 latency_ms=result["latency_ms"],
                 status=result["status"],
             )
@@ -193,4 +233,6 @@ async def ask(payload: AskRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing question: {str(e)}",
         )
+    finally:
+        concurrency_manager.release()
 

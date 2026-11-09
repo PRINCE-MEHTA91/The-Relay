@@ -1,10 +1,4 @@
-"""
-Task 5: Chunk extracted research paper text into token-sized segments with metadata.
-
-Tokenizer : bert-base-uncased (via HuggingFace transformers)
-Chunk size : 500 tokens  |  Overlap : 50 tokens
-Output     : processed/chunks.json
-"""
+"""Chunk extracted research paper text into token-sized segments with metadata."""
 
 import os
 import json
@@ -19,28 +13,20 @@ OUTPUT_FILE     = os.path.join(OUTPUT_DIR, "chunks.json")
 
 CHUNK_SIZE      = 500   # max tokens per chunk
 CHUNK_OVERLAP   = 50    # tokens shared between consecutive chunks
-MIN_CHUNK_TOKENS = 20   # discard very short chunks (headers, page labels, whitespace)
+MIN_CHUNK_TOKENS = 20   # discard very short chunks
 
-# Papers to process: (input txt filename, human-readable paper name)
 PAPERS = [
     ("attention_is_all_you_need.txt", "Attention Is All You Need"),
     ("moshi.txt",                     "Moshi"),
     ("dynamic_chunking.txt",          "Dynamic Chunking for RAG"),
 ]
 
-# Page marker pattern written by extract_papers.py  e.g. "--- Page 3 of 15 ---"
+# Page marker pattern written by extract_papers.py
 PAGE_MARKER_RE = re.compile(r"---\s*Page\s+(\d+)\s+of\s+(\d+)\s*---")
 
 
-# ---------------------------------------------------------------------------
-# Tokenizer setup
-# ---------------------------------------------------------------------------
-
 def load_tokenizer():
-    """
-    Load the BERT tokenizer for accurate token counting.
-    Falls back to whitespace splitting if transformers is unavailable.
-    """
+    """Load the BERT tokenizer; fallback to whitespace splitting if unavailable."""
     try:
         from transformers import AutoTokenizer
         print("  Loading BERT tokenizer (bert-base-uncased)...")
@@ -48,7 +34,6 @@ def load_tokenizer():
         print("  ✅ BERT tokenizer loaded.\n")
 
         def encode(text: str) -> list[int]:
-            # encode without special tokens ([CLS], [SEP]) so counts are clean
             return tokenizer.encode(text, add_special_tokens=False)
 
         def decode(token_ids: list[int]) -> str:
@@ -61,7 +46,6 @@ def load_tokenizer():
         print("  ↳ Falling back to whitespace tokenization (1 word ≈ 1 token).\n")
 
         def encode(text: str) -> list[int]:
-            # Each word becomes a fake integer token id (its index in this doc)
             return list(range(len(text.split())))
 
         def decode(token_ids: list[int]) -> str:
@@ -70,24 +54,13 @@ def load_tokenizer():
         return encode, decode, "whitespace-fallback"
 
 
-# ---------------------------------------------------------------------------
-# Page-aware text parsing
-# ---------------------------------------------------------------------------
-
 def parse_pages(raw_text: str) -> list[tuple[int, str]]:
-    """
-    Split raw extracted text into (page_number, page_text) pairs
-    using the '--- Page X of Y ---' markers inserted by extract_papers.py.
-    Returns [(1, "text..."), (2, "text..."), ...]
-    """
+    """Split raw text into (page_number, text) tuples using page header markers."""
     segments = PAGE_MARKER_RE.split(raw_text)
-    # split() on a group-capturing pattern gives: [pre, pg, total, text, pg, total, text, ...]
     if len(segments) < 4:
-        # No page markers found — treat entire text as page 1
         return [(1, raw_text.strip())]
 
     pages = []
-    # Iterate in steps of 3: (page_num, total_pages, page_text)
     for i in range(1, len(segments) - 2, 3):
         page_num  = int(segments[i])
         page_text = segments[i + 2].strip()
@@ -96,20 +69,8 @@ def parse_pages(raw_text: str) -> list[tuple[int, str]]:
     return pages
 
 
-# ---------------------------------------------------------------------------
-# Core chunking logic
-# ---------------------------------------------------------------------------
-
-def chunk_token_sequence(
-    token_ids: list[int],
-    chunk_size: int,
-    overlap: int,
-) -> list[tuple[int, int]]:
-    """
-    Slide a window of `chunk_size` tokens across the token list.
-    Returns list of (start_index, end_index) slice pairs.
-    Step = chunk_size - overlap ensures consecutive chunks share `overlap` tokens.
-    """
+def chunk_token_sequence(token_ids: list[int], chunk_size: int, overlap: int) -> list[tuple[int, int]]:
+    """Slide a window across token IDs with overlap, returning (start, end) index pairs."""
     spans = []
     start = 0
     step  = chunk_size - overlap
@@ -122,29 +83,14 @@ def chunk_token_sequence(
     return spans
 
 
-def chunk_paper(
-    raw_text:   str,
-    paper_name: str,
-    encode_fn,
-    decode_fn,
-    chunk_id_start: int,
-) -> list[dict]:
-    """
-    Full chunking pipeline for one paper:
-      1. Parse page markers to know which page each sentence came from
-      2. Tokenize page-by-page
-      3. Slide the chunk window across tokens
-      4. Decode each chunk back to text
-      5. Attach metadata (chunk_id, paper_name, page_number)
-    Returns a list of chunk records.
-    """
+def chunk_paper(raw_text: str, paper_name: str, encode_fn, decode_fn, chunk_id_start: int) -> list[dict]:
+    """Tokenize and slide window across paper text, attaching chunk_id and metadata."""
     pages = parse_pages(raw_text)
     all_chunks = []
     chunk_id   = chunk_id_start
 
-    # Build a flat token list while tracking which page each token came from
     flat_tokens: list[int] = []
-    token_page_map: list[int] = []   # parallel list: which page each token belongs to
+    token_page_map: list[int] = []
 
     for page_num, page_text in pages:
         page_tokens = encode_fn(page_text)
@@ -161,9 +107,8 @@ def chunk_paper(
         chunk_text   = decode_fn(chunk_tokens).strip()
 
         if len(chunk_tokens) < MIN_CHUNK_TOKENS:
-            continue    # skip trivially short chunks
+            continue
 
-        # Determine dominant page for this chunk (most tokens belong to)
         page_votes = token_page_map[start:end]
         page_num   = max(set(page_votes), key=page_votes.count)
 
@@ -179,17 +124,13 @@ def chunk_paper(
     return all_chunks
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def main():
+    """Check inputs, chunk all papers, save chunks.json and display summary."""
     print("\n" + "=" * 64)
     print("  THE RELAY — Task 5: Text Chunking")
     print("=" * 64)
     print(f"  chunk_size={CHUNK_SIZE} tokens  |  overlap={CHUNK_OVERLAP} tokens")
 
-    # Step 1: Check all input files exist
     print("\n📋 Checking input files...")
     missing = []
     for txt_name, _ in PAPERS:
@@ -204,19 +145,16 @@ def main():
         print("\n⛔ Missing files. Aborting.")
         sys.exit(1)
 
-    # Step 2: Load tokenizer
     print("\n🔤 Setting up tokenizer...")
     encode_fn, decode_fn, tokenizer_name = load_tokenizer()
     print(f"  Tokenizer: {tokenizer_name}")
 
-    # Step 3: Create output folder
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
         print(f"\n📁 Created folder: processed/")
     else:
         print(f"\n📁 Output folder already exists: processed/")
 
-    # Step 4: Process each paper
     all_chunks: list[dict] = []
     paper_stats: list[tuple[str, int]] = []
 
@@ -251,14 +189,12 @@ def main():
             print(f"  ❌ ERROR: {type(e).__name__}: {e}")
             paper_stats.append((paper_name, 0))
 
-    # Step 5: Save combined chunks.json
     print(f"\n💾 Saving {len(all_chunks)} total chunks to processed/chunks.json ...")
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(all_chunks, f, indent=2, ensure_ascii=False)
     output_kb = os.path.getsize(OUTPUT_FILE) / 1024
     print(f"   ✅ Saved  ({output_kb:.1f} KB)")
 
-    # Step 6: Summary table
     print(f"\n{'=' * 64}")
     print("  CHUNKING SUMMARY")
     print(f"{'=' * 64}")
@@ -268,9 +204,8 @@ def main():
     print(f"  {'TOTAL':<40} {len(all_chunks):>4} chunks")
     print(f"{'=' * 64}")
 
-    # Step 7: Show one sample chunk
     if all_chunks:
-        sample = all_chunks[len(all_chunks) // 2]   # pick a chunk from the middle
+        sample = all_chunks[len(all_chunks) // 2]
         print("\n📌 Sample Chunk (middle of dataset):")
         print(f"  chunk_id   : {sample['chunk_id']}")
         print(f"  paper_name : {sample['paper_name']}")

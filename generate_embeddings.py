@@ -1,11 +1,4 @@
-"""
-Task 6: Generate normalized sentence embeddings for all chunks using Sentence Transformers.
-
-Model  : sentence-transformers/all-MiniLM-L6-v2  (22 MB, 384 dimensions)
-Input  : processed/chunks.json
-Output : processed/embeddings.npy  (float32 numpy array, shape [N, 384])
-         processed/metadata.json   (list of chunk dicts without text duplication)
-"""
+"""Task 6: Generate normalized sentence embeddings for all chunks using Sentence Transformers."""
 
 import os
 import json
@@ -47,10 +40,7 @@ def load_model(model_name: str):
 
 
 def generate_embeddings(model, texts: list[str]) -> np.ndarray:
-    """
-    Encode all texts in batches. normalize_embeddings=True sets each vector
-    to length 1, making dot-product == cosine similarity in FAISS.
-    """
+    """Encode all texts in batches with normalize_embeddings=True for cosine similarity."""
     print(f"  Encoding {len(texts)} chunks in batches of {BATCH_SIZE}...")
     embeddings = model.encode(
         texts,

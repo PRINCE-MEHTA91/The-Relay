@@ -1,10 +1,4 @@
-"""
-Task 7: Build a FAISS vector index and search research paper chunks by question.
-
-Index type : IndexFlatIP (exact inner-product search on normalized vectors = cosine similarity)
-Input      : processed/embeddings.npy  |  processed/metadata.json
-Output     : processed/faiss_index.bin
-"""
+"""Task 7: Build FAISS vector index and search research paper chunks by question."""
 
 import os
 import json
@@ -28,11 +22,7 @@ TOP_K           = 5     # number of results to return per query
 # ---------------------------------------------------------------------------
 
 def build_faiss_index(embeddings: np.ndarray) -> faiss.Index:
-    """
-    Create an IndexFlatIP (Inner Product) index and add all embeddings.
-    IndexFlatIP = exact brute-force search. With normalized vectors,
-    inner product == cosine similarity. No training step needed.
-    """
+    """Create IndexFlatIP index and add all normalized vectors."""
     n_dims = embeddings.shape[1]
     index  = faiss.IndexFlatIP(n_dims)   # IP = Inner Product
     index.add(embeddings)                # add all vectors at once
@@ -50,12 +40,7 @@ def search(
     metadata:  list[dict],
     top_k:     int = TOP_K,
 ) -> list[dict]:
-    """
-    1. Embed the query with the same model used for documents.
-    2. Normalize it (must match how document embeddings were normalized).
-    3. Search the FAISS index for top_k nearest vectors.
-    4. Map result IDs back to chunk metadata.
-    """
+    """Embed query, normalize, search FAISS index and map to chunk metadata."""
     if not query.strip():
         print("⚠️  Empty query — please provide a question.")
         return []
