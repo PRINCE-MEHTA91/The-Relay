@@ -34,6 +34,13 @@ build/
 Thumbs.db
 desktop.ini
 
+# Downloaded Research Papers (large binary files - re-download via download_papers.py)
+papers/*.pdf
+download_papers.py
+
+# Extracted text files (auto-generated - recreate by running extract_papers.py)
+extracted_text/
+
 # Logs
 *.log
 logs/
@@ -42,4 +49,6 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+
 
