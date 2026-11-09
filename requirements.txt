@@ -1,0 +1,27 @@
+# Web Framework & Server
+fastapi
+uvicorn
+
+# LLM Integration
+groq
+
+# Environment & Configuration
+python-dotenv
+
+# PDF Processing
+pymupdf
+
+# Embeddings & Semantic Search
+sentence-transformers
+faiss-cpu
+
+# HTTP Client
+httpx
+
+# Data Validation
+pydantic
+
+# Data Processing
+pandas
+numpy
+
