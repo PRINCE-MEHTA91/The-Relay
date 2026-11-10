@@ -1,4 +1,4 @@
-"""Task 11: FastAPI backend with bounded request queue, SSE streaming, and rate limiting."""
+""" FastAPI backend with bounded request queue, SSE streaming, and rate limiting."""
 
 import os
 import sys
@@ -27,9 +27,8 @@ app = FastAPI(
 )
 
 
-# ---------------------------------------------------------------------------
 # Pydantic Schemas
-# ---------------------------------------------------------------------------
+
 
 class AskRequest(BaseModel):
     """Input payload for research questions."""
@@ -199,11 +198,16 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                         full_content = mock_service._generate_mock_content(prompt_messages)
                         from citation_validator import validate_citations
                         val = validate_citations(full_content, chunks)
+                        in_toks = sum(len(m.get("content", "").split()) for m in prompt_messages)
+                        out_toks = len(full_content.split())
                         end_data = json.dumps({
                             "token": "",
                             "done": True,
                             "citations": val["validated_citations"],
                             "status": "verified" if val["is_valid"] else "unverified",
+                            "input_tokens": in_toks,
+                            "output_tokens": out_toks,
+                            "retries_attempted": 0,
                         })
                         yield f"data: {end_data}\n\n"
                 finally:

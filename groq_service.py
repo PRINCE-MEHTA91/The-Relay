@@ -67,10 +67,7 @@ def send_chat_completion(
     initial_delay: Optional[float] = None,
     client: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """
-    Send messages to Groq with token budget enforcement, timeout handling, and exponential retries.
-    Tracks exact token usage and never retries permanent errors (401, 400, 404).
-    """
+    """Send prompt to Groq with token limits, timeout, and retry handling."""
     selected_model = model or os.getenv("GROQ_MODEL", DEFAULT_MODEL)
     temp = DEFAULT_TEMPERATURE if temperature is None else temperature
     out_tokens = DEFAULT_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens

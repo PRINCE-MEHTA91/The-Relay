@@ -95,10 +95,7 @@ def verify_citation_metadata(
     citations: List[Dict[str, Any]],
     retrieved_chunks: List[Dict[str, Any]],
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
-    """
-    Verify cited paper titles and page numbers against retrieved chunks.
-    Returns (validated_citations, list_of_errors).
-    """
+    """Check that cited paper names and page numbers exist in retrieved chunks."""
     validated = []
     errors = []
 
@@ -172,10 +169,7 @@ def check_claim_support(
     retrieved_chunks: List[Dict[str, Any]],
     min_word_overlap_ratio: float = 0.30,
 ) -> List[str]:
-    """
-    Check if substantive factual sentences in the answer are supported by retrieved passages.
-    Returns list of unsupported claim sentences.
-    """
+    """Check if sentences in the answer are supported by retrieved text."""
     # Combine all retrieved text into a single reference text
     context_text = " ".join(c.get("text", "") for c in retrieved_chunks)
     context_words = extract_content_words(context_text)
@@ -218,15 +212,7 @@ def validate_citations(
     retrieved_chunks: List[Dict[str, Any]],
     citation_metadata: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """
-    Main validator entrypoint.
-    Returns structured validation dictionary:
-      - is_valid: bool
-      - citation_errors: List[str]
-      - unsupported_claims: List[str]
-      - validated_citations: List[Dict]
-      - validation_status: str
-    """
+    """Validate citations and claims in the answer against retrieved chunks."""
     # Case 1: Empty answer
     if not answer or not answer.strip():
         return {
