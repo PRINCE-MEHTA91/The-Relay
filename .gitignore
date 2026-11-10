@@ -1,15 +1,21 @@
-# Virtual Environment
+# Virtual environments
 venv/
 .venv/
 env/
 ENV/
 
-# Secret Environment Variables (keep .env.example only)
+# Secret keys and environment files (keep .env.example only)
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json
+auth.json
 
-# Python Cache
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *$py.class
@@ -17,13 +23,13 @@ __pycache__/
 *.pyd
 *.pyc
 
-# Distribution and Builds
+# Distribution and builds
 dist/
 build/
 *.egg-info/
 *.egg
 
-# Editor and IDE Settings
+# Editor and IDE configurations
 .vscode/
 .idea/
 *.suo
@@ -31,39 +37,60 @@ build/
 *.njsproj
 *.sln
 *.sw?
+*.sublime-project
+*.sublime-workspace
 
-# Operating System Files
+# Operating system files
 .DS_Store
 Thumbs.db
 desktop.ini
+$RECYCLE.BIN/
+*.lnk
 
-# Downloaded Research Papers and Large Binary Files
-papers/*.pdf
-papers/download_papers.py
-download_papers.py
+# Downloaded research papers and PDFs
+papers/
 *.pdf
 
-# Extracted Text Files (auto-generated)
+# Auto-generated extracted text
 extracted_text/
 
-# Processed Vectors and Metadata (auto-generated)
+# Auto-generated FAISS index and vector metadata
 processed/
 *.npy
 *.bin
 *.faiss
 *.pkl
 
-# Load Testing & Experiment Results
-results.csv
-results*.csv
-retrieval_experiments.csv
-*.csv
+# HuggingFace and PyTorch caches
+.cache/
+hf_cache/
+models/
 
-# Logs
-*.log
-logs/
+# Scratch and temporary scripts
+calculate_report_metrics.py
+scratch/
+temp/
+tmp/
+*.tmp
+*.temp
+*.bak
 
-# Testing and Coverage Reports
+# Testing and coverage caches
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Application and server logs
+*.log
+logs/
+*.out
+*.pid
+
+# CSV test and load run files (keep only the 3 required assignment results)
+*.csv
+!results.csv
+!retrieval_experiments.csv
+!answer_evaluation.csv

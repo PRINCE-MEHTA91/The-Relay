@@ -1,0 +1,75 @@
+request_id,scenario,source,start_time,first_token_ms,total_ms,status,retries,tokens_in,tokens_out,retrieval_setting,answer_grade
+req_1f4aae75,steady,stand-in,2026-11-10T17:56:59.426814+00:00,,2489.96,ok,0,1963,19,top_k=5,
+req_4b16b9b9,steady,stand-in,2026-11-10T17:57:01.808573+00:00,,119.07,ok,0,1988,21,top_k=5,
+req_3d1ed909,steady,stand-in,2026-11-10T17:57:02.418478+00:00,,126.38,ok,0,1963,19,top_k=5,
+req_9f69f447,steady,stand-in,2026-11-10T17:57:02.439816+00:00,,124.65,ok,0,2025,19,top_k=5,
+req_7d994e1c,steady,stand-in,2026-11-10T17:57:03.049793+00:00,,119.55,ok,0,1980,19,top_k=5,
+req_1a4918ea,steady,stand-in,2026-11-10T17:57:03.070616+00:00,,119.7,ok,0,2033,19,top_k=5,
+req_75b960f9,burst,stand-in,2026-11-10T17:57:03.708171+00:00,,147.94,ok,0,1963,19,top_k=5,
+req_7968fb01,burst,stand-in,2026-11-10T17:57:03.752119+00:00,,131.54,ok,0,1988,21,top_k=5,
+req_6470e8f7,burst,stand-in,2026-11-10T17:57:03.778777+00:00,,119.15,ok,0,1963,19,top_k=5,
+req_c7b212e6,burst,stand-in,2026-11-10T17:57:03.795779+00:00,,173.02,ok,0,2025,19,top_k=5,
+req_f7594a75,burst,stand-in,2026-11-10T17:57:03.796412+00:00,,0.55,rate_limited,,,,top_k=5,
+req_65e1ad07,burst,stand-in,2026-11-10T17:57:03.797005+00:00,,0.45,rate_limited,,,,top_k=5,
+req_d4849c2a,burst,stand-in,2026-11-10T17:57:03.797493+00:00,,0.4,rate_limited,,,,top_k=5,
+req_fddc4653,burst,stand-in,2026-11-10T17:57:03.797921+00:00,,0.42,rate_limited,,,,top_k=5,
+req_e010b07d,burst,stand-in,2026-11-10T17:57:03.798367+00:00,,0.5,rate_limited,,,,top_k=5,
+req_4a9347ab,burst,stand-in,2026-11-10T17:57:03.798901+00:00,,0.43,rate_limited,,,,top_k=5,
+req_d2a1e9a0,sustained_overload,stand-in,2026-11-10T17:57:03.968989+00:00,,0.51,rate_limited,,,,top_k=5,
+req_22472779,sustained_overload,stand-in,2026-11-10T17:57:03.969538+00:00,,0.34,rate_limited,,,,top_k=5,
+req_53f81c3d,sustained_overload,stand-in,2026-11-10T17:57:03.969910+00:00,,0.33,rate_limited,,,,top_k=5,
+req_de61db83,sustained_overload,stand-in,2026-11-10T17:57:03.970265+00:00,,0.32,rate_limited,,,,top_k=5,
+req_25adfc40,sustained_overload,stand-in,2026-11-10T17:57:03.970610+00:00,,0.32,rate_limited,,,,top_k=5,
+req_af5e7fe1,sustained_overload,stand-in,2026-11-10T17:57:03.970958+00:00,,0.33,rate_limited,,,,top_k=5,
+req_971dbbc6,sustained_overload,stand-in,2026-11-10T17:57:03.971320+00:00,,0.32,rate_limited,,,,top_k=5,
+req_9b07e72e,sustained_overload,stand-in,2026-11-10T17:57:03.971663+00:00,,0.31,rate_limited,,,,top_k=5,
+req_2e5c5be3,sustained_overload,stand-in,2026-11-10T17:57:03.972007+00:00,,0.47,rate_limited,,,,top_k=5,
+req_702c386a,sustained_overload,stand-in,2026-11-10T17:57:03.972509+00:00,,0.41,rate_limited,,,,top_k=5,
+req_46b6e632,sustained_overload,stand-in,2026-11-10T17:57:03.972947+00:00,,0.73,rate_limited,,,,top_k=5,
+req_70e122a5,sustained_overload,stand-in,2026-11-10T17:57:03.973721+00:00,,0.51,rate_limited,,,,top_k=5,
+req_d4ca67be,sustained_overload,stand-in,2026-11-10T17:57:03.974277+00:00,,0.48,rate_limited,,,,top_k=5,
+req_10807f33,sustained_overload,stand-in,2026-11-10T17:57:03.974793+00:00,,0.42,rate_limited,,,,top_k=5,
+req_ccc22f72,sustained_overload,stand-in,2026-11-10T17:57:03.975243+00:00,,0.49,rate_limited,,,,top_k=5,
+req_ab79a58c,limit_halved,stand-in,2026-11-10T17:57:03.975825+00:00,,116.37,ok,0,1963,19,top_k=5,
+req_6284acc9,limit_halved,stand-in,2026-11-10T17:57:04.145984+00:00,,119.96,ok,0,1988,21,top_k=5,
+req_6f01a114,limit_halved,stand-in,2026-11-10T17:57:04.319611+00:00,,120.08,ok,0,1963,19,top_k=5,
+req_4c66737f,limit_halved,stand-in,2026-11-10T17:57:04.493188+00:00,,120.11,ok,0,2025,19,top_k=5,
+req_64b7ccf8,limit_halved,stand-in,2026-11-10T17:57:04.666893+00:00,,126.97,ok,0,1980,19,top_k=5,
+req_e079d204,limit_halved,stand-in,2026-11-10T17:57:04.847511+00:00,,1.24,rate_limited,,,,top_k=5,
+req_160a4981,limit_halved,stand-in,2026-11-10T17:57:04.903000+00:00,,0.99,rate_limited,,,,top_k=5,
+req_b9653b6f,limit_halved,stand-in,2026-11-10T17:57:04.958622+00:00,,1.25,rate_limited,,,,top_k=5,
+req_d57facba,budget_exhausted,stand-in,2026-11-10T17:57:05.014301+00:00,,70.31,rate_limited,,,,top_k=5,
+req_33038a69,budget_exhausted,stand-in,2026-11-10T17:57:05.139114+00:00,,69.93,rate_limited,,,,top_k=5,
+req_05a46dc8,budget_exhausted,stand-in,2026-11-10T17:57:05.271028+00:00,,69.92,rate_limited,,,,top_k=5,
+req_322ffa9b,budget_exhausted,stand-in,2026-11-10T17:57:05.396026+00:00,,69.91,rate_limited,,,,top_k=5,
+req_80b9250c,budget_exhausted,stand-in,2026-11-10T17:57:05.521046+00:00,,76.9,rate_limited,,,,top_k=5,
+exp_f47fd141,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,123.69,ok,,1338,21,"Setting A (250t, Top-6, No-Rerank)",
+exp_8a1b06a2,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,117.58,ok,,1363,19,"Setting A (250t, Top-6, No-Rerank)",
+exp_4c8a6255,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,117.73,ok,,1383,19,"Setting A (250t, Top-6, No-Rerank)",
+exp_dfe6db18,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,118.83,ok,,1289,21,"Setting A (250t, Top-6, No-Rerank)",
+exp_be730a2a,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,116.72,ok,,1236,10,"Setting A (250t, Top-6, No-Rerank)",
+exp_168096f4,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,118.28,ok,,1732,21,"Setting B (500t, Top-4, No-Rerank)",
+exp_068018d4,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,118.1,ok,,1727,19,"Setting B (500t, Top-4, No-Rerank)",
+exp_03e143b0,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,117.72,ok,,1702,19,"Setting B (500t, Top-4, No-Rerank)",
+exp_069af0e3,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,113.43,ok,,1809,21,"Setting B (500t, Top-4, No-Rerank)",
+exp_480bfd88,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,117.97,ok,,1510,10,"Setting B (500t, Top-4, No-Rerank)",
+exp_8d98bdc8,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,138.41,ok,,3383,21,"Setting C (500t, Top-8, Hybrid-Rerank)",
+exp_1740d82e,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,117.28,ok,,3376,19,"Setting C (500t, Top-8, Hybrid-Rerank)",
+exp_46b7ffab,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,118.12,ok,,3276,19,"Setting C (500t, Top-8, Hybrid-Rerank)",
+exp_5758d874,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,118.63,ok,,3443,21,"Setting C (500t, Top-8, Hybrid-Rerank)",
+exp_26be6625,retrieval_experiment,stand-in,2026-11-10T18:06:34.790738+00:00,,122.79,ok,,3074,10,"Setting C (500t, Top-8, Hybrid-Rerank)",
+Q01,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,185.22,ok,,2063,19,top_k=5,correct
+Q02,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,116.93,ok,,1919,20,top_k=5,correct
+Q03,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,116.39,ok,,2181,21,top_k=5,correct
+Q04,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,116.06,ok,,2184,22,top_k=5,correct
+Q05,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,116.94,ok,,2075,20,top_k=5,correct
+Q06,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.17,ok,,2024,16,top_k=5,wrong
+Q07,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.18,ok,,1984,16,top_k=5,wrong
+Q08,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.21,ok,,2049,15,top_k=5,correct
+Q09,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.2,ok,,2097,19,top_k=5,correct
+Q10,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.19,ok,,2116,18,top_k=5,wrong
+Q11,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.33,ok,,2100,20,top_k=5,correct
+Q12,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.54,ok,,2039,20,top_k=5,wrong
+Q13,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.37,ok,,1836,10,top_k=5,refused_correctly
+Q14,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,127.13,ok,,2108,10,top_k=5,refused_correctly
+Q15,answer_evaluation,stand-in,2026-11-10T18:06:34.790738+00:00,,117.51,ok,,1874,10,top_k=5,refused_correctly

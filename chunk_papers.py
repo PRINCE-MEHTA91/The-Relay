@@ -83,7 +83,15 @@ def chunk_token_sequence(token_ids: list[int], chunk_size: int, overlap: int) ->
     return spans
 
 
-def chunk_paper(raw_text: str, paper_name: str, encode_fn, decode_fn, chunk_id_start: int) -> list[dict]:
+def chunk_paper(
+    raw_text: str,
+    paper_name: str,
+    encode_fn,
+    decode_fn,
+    chunk_id_start: int,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
+) -> list[dict]:
     """Tokenize and slide window across paper text, attaching chunk_id and metadata."""
     pages = parse_pages(raw_text)
     all_chunks = []
@@ -100,7 +108,7 @@ def chunk_paper(raw_text: str, paper_name: str, encode_fn, decode_fn, chunk_id_s
     if not flat_tokens:
         return []
 
-    spans = chunk_token_sequence(flat_tokens, CHUNK_SIZE, CHUNK_OVERLAP)
+    spans = chunk_token_sequence(flat_tokens, chunk_size, overlap)
 
     for start, end in spans:
         chunk_tokens = flat_tokens[start:end]
@@ -122,6 +130,23 @@ def chunk_paper(raw_text: str, paper_name: str, encode_fn, decode_fn, chunk_id_s
         chunk_id += 1
 
     return all_chunks
+
+
+def build_chunks_for_size(chunk_size: int = 250, overlap: int = 25) -> list[dict]:
+    """Generate chunks for all three papers at specified token size and overlap."""
+    encode_fn, decode_fn, _ = load_tokenizer()
+    chunks = []
+    cid = 1
+    for txt_name, paper_title in PAPERS:
+        path = os.path.join(INPUT_DIR, txt_name)
+        if not os.path.exists(path):
+            continue
+        with open(path, "r", encoding="utf-8") as f:
+            raw_text = f.read()
+        paper_chunks = chunk_paper(raw_text, paper_title, encode_fn, decode_fn, cid, chunk_size, overlap)
+        chunks.extend(paper_chunks)
+        cid += len(paper_chunks)
+    return chunks
 
 
 def main():

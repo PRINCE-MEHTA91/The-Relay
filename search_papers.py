@@ -2,6 +2,7 @@
 
 import os
 import json
+import re
 import sys
 import numpy as np
 import faiss
@@ -68,6 +69,37 @@ def search(
             "text":        chunk["text"],
         })
     return results
+
+
+def compute_lexical_overlap(query: str, text: str) -> float:
+    """Calculate normalized token-overlap ratio between query and text."""
+    query_tokens = set(re.findall(r"\b[a-zA-Z]{3,}\b", query.lower()))
+    if not query_tokens:
+        return 0.0
+    text_lower = text.lower()
+    matches = sum(1 for q in query_tokens if q in text_lower)
+    return matches / len(query_tokens)
+
+
+def hybrid_rerank(
+    query: str,
+    candidates: list[dict],
+    top_k: int = 8,
+    alpha: float = 0.65,
+) -> list[dict]:
+    """Fuse semantic vector score with lexical token overlap to re-rank chunks."""
+    reranked = []
+    for c in candidates:
+        sem_score = float(c.get("score", 0.0))
+        lex_score = compute_lexical_overlap(query, c.get("text", ""))
+        hybrid_score = round(alpha * sem_score + (1.0 - alpha) * lex_score, 4)
+        c_copy = dict(c)
+        c_copy["semantic_score"] = sem_score
+        c_copy["lexical_score"] = lex_score
+        c_copy["score"] = hybrid_score
+        reranked.append(c_copy)
+    reranked.sort(key=lambda x: x["score"], reverse=True)
+    return reranked[:top_k]
 
 
 def print_results(query: str, results: list[dict]):
