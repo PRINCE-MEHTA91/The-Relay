@@ -1,4 +1,4 @@
-"""Rate limiter tracking client requests per minute using a sliding window algorithm."""
+"""Rate limiter tracking requests per minute and concurrency queue manager with bounded capacity."""
 
 import os
 import time
@@ -11,6 +11,9 @@ load_dotenv()
 
 DEFAULT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
 DEFAULT_WINDOW_SECONDS = float(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60.0"))
+DEFAULT_MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "3"))
+DEFAULT_MAX_QUEUE_SIZE = int(os.getenv("MAX_QUEUE_SIZE", "5"))
+DEFAULT_QUEUE_TIMEOUT = float(os.getenv("QUEUE_TIMEOUT_SECONDS", "5.0"))
 
 
 class SlidingWindowRateLimiter:
@@ -50,19 +53,27 @@ class SlidingWindowRateLimiter:
 
 
 class ConcurrencyQueueManager:
-    """Regulates maximum concurrent active requests using an asyncio Semaphore."""
+    """Regulates maximum concurrent active requests using a bounded queue and semaphore."""
 
-    def __init__(self, max_concurrency: int = 3, queue_timeout: float = 5.0):
+    def __init__(
+        self,
+        max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
+        max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
+        queue_timeout: float = DEFAULT_QUEUE_TIMEOUT,
+    ):
         self.max_concurrency = max_concurrency
+        self.max_queue_size = max_queue_size
         self.queue_timeout = queue_timeout
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.active_count = 0
         self.queued_count = 0
         self._lock = asyncio.Lock()
 
-    async def acquire(self) -> bool:
-        """Wait for an execution slot up to queue_timeout seconds."""
+    async def acquire(self) -> Tuple[bool, str]:
+        """Attempt to acquire execution slot; returns (acquired, 'ACQUIRED'|'QUEUE_FULL'|'TIMEOUT')."""
         async with self._lock:
+            if self.queued_count >= self.max_queue_size:
+                return False, "QUEUE_FULL"
             self.queued_count += 1
 
         try:
@@ -73,11 +84,11 @@ class ConcurrencyQueueManager:
             async with self._lock:
                 self.queued_count -= 1
                 self.active_count += 1
-            return acquired
+            return acquired, "ACQUIRED"
         except asyncio.TimeoutError:
             async with self._lock:
                 self.queued_count -= 1
-            return False
+            return False, "TIMEOUT"
 
     def release(self):
         """Release an execution slot."""
@@ -88,6 +99,7 @@ class ConcurrencyQueueManager:
         """Return active and queued count metrics."""
         return {
             "max_concurrency": self.max_concurrency,
+            "max_queue_size": self.max_queue_size,
             "active_requests": self.active_count,
             "queued_requests": self.queued_count,
         }
@@ -95,4 +107,8 @@ class ConcurrencyQueueManager:
 
 # Global default instances
 limiter = SlidingWindowRateLimiter(max_requests=DEFAULT_MAX_REQUESTS, window_seconds=DEFAULT_WINDOW_SECONDS)
-concurrency_manager = ConcurrencyQueueManager(max_concurrency=3, queue_timeout=5.0)
+concurrency_manager = ConcurrencyQueueManager(
+    max_concurrency=DEFAULT_MAX_CONCURRENCY,
+    max_queue_size=DEFAULT_MAX_QUEUE_SIZE,
+    queue_timeout=DEFAULT_QUEUE_TIMEOUT,
+)

@@ -1,4 +1,4 @@
-"""Task 12: Mock LLM Service simulating real provider behaviors (latencies, errors, streaming)."""
+"""Mock LLM Service simulating real provider behaviors (latencies, errors, streaming)."""
 
 import asyncio
 import time
@@ -74,8 +74,31 @@ class MockLLMService:
     def _generate_mock_content(self, messages: List[Dict[str, str]]) -> str:
         """Generate a deterministic, plausible answer based on prompt keywords."""
         full_prompt = " ".join(m.get("content", "") for m in messages).lower()
+        target = full_prompt.split("question:")[-1].strip() if "question:" in full_prompt else full_prompt
 
-        if "transformer" in full_prompt and "architecture" in full_prompt:
+        if "dynamic chunking" in target:
+            return (
+                "Dynamic chunking segments text adaptively using boundary scoring modules "
+                "rather than fixed-width splits [Dynamic Chunking for RAG, p. 7]."
+            )
+        elif "moshi" in target:
+            return (
+                "Moshi is a real-time speech-text foundation model enabling full-duplex spoken dialogue "
+                "using separate audio codec streams [Moshi, p. 11]."
+            )
+        elif "self-attention" in target:
+            return (
+                "Self-attention maps query, key, and value vectors to compute attention weights "
+                "via scaled dot-products [Attention Is All You Need, p. 4]."
+            )
+        elif "transformer" in target and "architecture" in target:
+            return (
+                "The Transformer uses an encoder-decoder architecture with stacked self-attention "
+                "and feed-forward sublayers [Attention Is All You Need, p. 3]."
+            )
+        elif "recipe" in target or "croissant" in target:
+            return "The answer cannot be found in the provided research papers."
+        elif "transformer" in full_prompt and "architecture" in full_prompt:
             return (
                 "The Transformer uses an encoder-decoder architecture with stacked self-attention "
                 "and feed-forward sublayers [Attention Is All You Need, p. 3]."

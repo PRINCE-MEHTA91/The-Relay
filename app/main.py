@@ -1,10 +1,13 @@
-"""Task 11: FastAPI backend exposing The Relay AI Research Assistant via REST endpoints."""
+"""Task 11: FastAPI backend with bounded request queue, SSE streaming, and rate limiting."""
 
 import os
 import sys
 import time
+import json
+import asyncio
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 # Ensure project root is in python path
@@ -19,7 +22,7 @@ from rate_limiter import limiter, concurrency_manager
 # Initialize FastAPI application with OpenAPI metadata
 app = FastAPI(
     title="The Relay — AI Research Assistant API",
-    description="REST API for RAG-powered research document question answering with citation validation.",
+    description="REST API for RAG research Q&A with bounded queue, SSE streaming, and citation validation.",
     version="1.0.0",
 )
 
@@ -34,6 +37,7 @@ class AskRequest(BaseModel):
     top_k: int = Field(5, ge=1, le=20, description="Number of passages to retrieve.")
     use_mock: bool = Field(False, description="Use the local Mock LLM service instead of Groq.")
     mock_mode: Optional[MockMode] = Field(None, description="Operational mode for mock LLM if use_mock is True.")
+    stream: bool = Field(False, description="Stream response progressively via Server-Sent Events (SSE).")
 
 
 class CitationItem(BaseModel):
@@ -108,7 +112,7 @@ def health():
 
 @app.get("/metrics", status_code=status.HTTP_200_OK)
 def metrics():
-    """Return runtime concurrency and rate limiting statistics."""
+    """Return runtime concurrency, queue depth, and rate limiting statistics."""
     stats = concurrency_manager.stats()
     return {
         "rate_limiter": {
@@ -119,9 +123,9 @@ def metrics():
     }
 
 
-@app.post("/ask", response_model=AskResponse, status_code=status.HTTP_200_OK)
+@app.post("/ask", status_code=status.HTTP_200_OK)
 async def ask(payload: AskRequest, request: Request, response: Response):
-    """Answer a research question with rate limiting and concurrency management."""
+    """Answer research questions with bounded queueing, rate limiting, and optional SSE streaming."""
     clean_question = payload.question.strip()
     if not clean_question:
         raise HTTPException(
@@ -145,14 +149,81 @@ async def ask(payload: AskRequest, request: Request, response: Response):
             },
         )
 
-    # 2. Enforce concurrency queue slot
-    acquired = await concurrency_manager.acquire()
+    # 2. Enforce bounded concurrency queue
+    acquired, reason = await concurrency_manager.acquire()
     if not acquired:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Server busy: request queue timed out waiting for an execution slot.",
-        )
+        if reason == "QUEUE_FULL":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Server busy: request queue is full. Please try again later.",
+                headers={"Retry-After": "5"},
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Server busy: request queue timed out waiting for an execution slot.",
+                headers={"Retry-After": "5"},
+            )
 
+    # 3. Handle Streaming Response via Server-Sent Events (SSE)
+    if payload.stream:
+        try:
+            model, index, metadata = answer_generator.load_retrieval_pipeline()
+            import search_papers
+            chunks = search_papers.search(
+                query=clean_question,
+                model=model,
+                index=index,
+                metadata=metadata,
+                top_k=payload.top_k,
+            )
+            prompt_messages = [
+                {"role": "user", "content": f"Context: {answer_generator.format_context_passages(chunks)}\n\nQuestion: {clean_question}"}
+            ]
+
+            async def sse_event_generator():
+                try:
+                    init_data = json.dumps({"type": "init", "retrieved_chunks": len(chunks), "done": False})
+                    yield f"data: {init_data}\n\n"
+
+                    async for token in mock_service.stream_response(prompt_messages, chunk_delay=0.03):
+                        if await request.is_disconnected():
+                            break
+                        chunk_data = json.dumps({"token": token, "done": False})
+                        yield f"data: {chunk_data}\n\n"
+
+                        if payload.mock_mode == MockMode.SLOW:
+                            await asyncio.sleep(0.1)
+
+                    if not await request.is_disconnected():
+                        full_content = mock_service._generate_mock_content(prompt_messages)
+                        from citation_validator import validate_citations
+                        val = validate_citations(full_content, chunks)
+                        end_data = json.dumps({
+                            "token": "",
+                            "done": True,
+                            "citations": val["validated_citations"],
+                            "status": "verified" if val["is_valid"] else "unverified",
+                        })
+                        yield f"data: {end_data}\n\n"
+                finally:
+                    concurrency_manager.release()
+
+            return StreamingResponse(
+                sse_event_generator(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-RateLimit-Limit": str(limiter.max_requests),
+                    "X-RateLimit-Remaining": str(remaining),
+                },
+            )
+        except Exception:
+            concurrency_manager.release()
+            raise
+
+    # 4. Handle Standard Normal Response (JSON)
     try:
         response.headers["X-RateLimit-Limit"] = str(limiter.max_requests)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
@@ -236,3 +307,9 @@ async def ask(payload: AskRequest, request: Request, response: Response):
     finally:
         concurrency_manager.release()
 
+
+@app.post("/ask/stream", status_code=status.HTTP_200_OK)
+async def ask_stream(payload: AskRequest, request: Request, response: Response):
+    """Dedicated endpoint returning SSE streaming response."""
+    payload.stream = True
+    return await ask(payload, request, response)
