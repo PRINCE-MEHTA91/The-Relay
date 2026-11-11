@@ -1,23 +1,33 @@
-""" FastAPI backend with bounded request queue, SSE streaming, and rate limiting."""
+"""FastAPI backend with bounded request queue, SSE streaming, and rate limiting."""
 
 import os
 import sys
 import time
 import json
 import asyncio
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 # Ensure project root is in python path
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-import answer_generator
-from mock_llm import MockMode, mock_service
-from rate_limiter import limiter, concurrency_manager
+try:
+    from core import answer_generator
+    from core.mock_llm import MockMode, mock_service
+    from core.rate_limiter import limiter, concurrency_manager
+    from rag import search_papers
+    from rag.citation_validator import validate_citations
+except ImportError:
+    import answer_generator
+    from mock_llm import MockMode, mock_service
+    from rate_limiter import limiter, concurrency_manager
+    import search_papers
+    from citation_validator import validate_citations
 
 # Initialize FastAPI application with OpenAPI metadata
 app = FastAPI(
@@ -166,9 +176,23 @@ async def ask(payload: AskRequest, request: Request, response: Response):
 
     # 3. Handle Streaming Response via Server-Sent Events (SSE)
     if payload.stream:
+        mode_val = payload.mock_mode.value if hasattr(payload.mock_mode, "value") else str(payload.mock_mode or "")
+        if mode_val == "RATE_LIMITED":
+            concurrency_manager.release()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded (simulated daily quota exhaustion).",
+                headers={"Retry-After": "60"},
+            )
+        elif mode_val in ("FAILURE", "SERVER_ERROR"):
+            concurrency_manager.release()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Upstream server error (simulated).",
+            )
+
         try:
             model, index, metadata = answer_generator.load_retrieval_pipeline()
-            import search_papers
             chunks = search_papers.search(
                 query=clean_question,
                 model=model,
@@ -196,7 +220,6 @@ async def ask(payload: AskRequest, request: Request, response: Response):
 
                     if not await request.is_disconnected():
                         full_content = mock_service._generate_mock_content(prompt_messages)
-                        from citation_validator import validate_citations
                         val = validate_citations(full_content, chunks)
                         in_toks = sum(len(m.get("content", "").split()) for m in prompt_messages)
                         out_toks = len(full_content.split())
@@ -235,7 +258,6 @@ async def ask(payload: AskRequest, request: Request, response: Response):
         if payload.use_mock or payload.mock_mode:
             start_t = time.perf_counter()
             model, index, metadata = answer_generator.load_retrieval_pipeline()
-            import search_papers
             chunks = search_papers.search(
                 query=clean_question,
                 model=model,
@@ -258,7 +280,6 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                     detail=mock_res["error"],
                 )
 
-            from citation_validator import validate_citations
             val = validate_citations(mock_res["content"], chunks)
             total_lat = round((time.perf_counter() - start_t) * 1000, 2)
 

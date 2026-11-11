@@ -1,0 +1,4 @@
+request_id,scenario,source,start_time,first_token_ms,total_ms,status,retries,tokens_in,tokens_out,retrieval_setting,answer_grade
+req_b675d74d,steady,stand-in,2026-11-10T18:02:39.675978+00:00,3432.29,3432.37,ok,0,1963,19,top_k=5,
+req_744b99b3,steady,stand-in,2026-11-10T18:02:43.613180+00:00,745.64,745.74,ok,0,1988,21,top_k=5,
+req_b8a78dfc,steady,stand-in,2026-11-10T18:02:44.859238+00:00,682.31,682.39,ok,0,1963,19,top_k=5,

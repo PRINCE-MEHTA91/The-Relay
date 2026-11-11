@@ -1,0 +1,16 @@
+experiment_id,retrieval_setting,chunk_size,top_k,reranking,source,question,retrieval_latency_ms,first_token_ms,total_latency_ms,tokens_in,tokens_out,total_tokens,is_valid,citations_count
+stream_dfc295c4,Setting A,250,6,Disabled,stand-in,What is the Transformer architecture and how does self-attention work?,130.61,163.46,798.3,1267,19,1286,True,1
+stream_bb6288e7,Setting A,250,6,Disabled,stand-in,What is Moshi and how does it support full-duplex spoken dialogue?,18.81,56.92,767.27,1292,20,1312,True,1
+stream_4e16669a,Setting A,250,6,Disabled,stand-in,How does dynamic chunking differ from fixed-size chunking in RAG?,22.86,59.43,825.21,1330,22,1352,True,1
+stream_cb6e905f,Setting A,250,6,Disabled,stand-in,What are the computational complexity advantages of self-attention layers?,21.09,53.89,777.3,1218,21,1239,True,1
+stream_ed7d9518,Setting A,250,6,Disabled,stand-in,What are the recipe ingredients and steps for baking French chocolate croissants?,25.35,63.03,380.45,1168,10,1178,True,0
+stream_3e229225,Setting B,500,4,Disabled,stand-in,What is the Transformer architecture and how does self-attention work?,21.16,56.74,707.0,1661,19,1680,True,1
+stream_b6a487e1,Setting B,500,4,Disabled,stand-in,What is Moshi and how does it support full-duplex spoken dialogue?,33.57,65.85,755.69,1656,20,1676,True,1
+stream_8516d057,Setting B,500,4,Disabled,stand-in,How does dynamic chunking differ from fixed-size chunking in RAG?,17.62,53.65,790.74,1640,22,1662,True,1
+stream_1bc8b69e,Setting B,500,4,Disabled,stand-in,What are the computational complexity advantages of self-attention layers?,19.09,57.39,758.3,1738,21,1759,True,1
+stream_9bf3ddb7,Setting B,500,4,Disabled,stand-in,What are the recipe ingredients and steps for baking French chocolate croissants?,46.43,85.4,406.04,1439,10,1449,True,0
+stream_10f8149d,Setting C,500,8,Enabled,stand-in,What is the Transformer architecture and how does self-attention work?,20.51,54.45,657.51,3318,19,3337,True,1
+stream_fb99fa0d,Setting C,500,8,Enabled,stand-in,What is Moshi and how does it support full-duplex spoken dialogue?,18.72,50.8,721.32,3305,20,3325,True,1
+stream_8286976f,Setting C,500,8,Enabled,stand-in,How does dynamic chunking differ from fixed-size chunking in RAG?,14.39,47.27,776.21,3229,22,3251,True,1
+stream_0cf503f9,Setting C,500,8,Enabled,stand-in,What are the computational complexity advantages of self-attention layers?,20.17,58.03,763.6,3372,21,3393,True,1
+stream_40f848e1,Setting C,500,8,Enabled,stand-in,What are the recipe ingredients and steps for baking French chocolate croissants?,15.25,50.43,379.39,3003,10,3013,True,0

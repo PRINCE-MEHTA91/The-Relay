@@ -50,12 +50,20 @@ $RECYCLE.BIN/
 # Downloaded research papers and PDFs
 papers/
 *.pdf
+!final_report.pdf
+!reports/final_report.pdf
+!reports/*.pdf
 
 # Auto-generated extracted text
 extracted_text/
+data/extracted_text/
 
 # Auto-generated FAISS index and vector metadata
 processed/
+data/embeddings/*.npy
+data/embeddings/*.bin
+data/processed/*.npy
+data/processed/*.bin
 *.npy
 *.bin
 *.faiss
@@ -67,7 +75,6 @@ hf_cache/
 models/
 
 # Scratch and temporary scripts
-calculate_report_metrics.py
 scratch/
 temp/
 tmp/
@@ -89,8 +96,13 @@ logs/
 *.out
 *.pid
 
-# CSV test and load run files (keep only the 3 required assignment results)
+# CSV test and load run files (keep only the required assignment results and deliverables)
 *.csv
 !results.csv
+!results_load.csv
+!results_stream.csv
 !retrieval_experiments.csv
 !answer_evaluation.csv
+!retrieval_streaming_experiments.csv
+!results/**/*.csv
+!results/*.csv
