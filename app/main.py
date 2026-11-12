@@ -5,6 +5,7 @@ import sys
 import time
 import json
 import asyncio
+import threading
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -18,12 +19,14 @@ if str(ROOT_DIR) not in sys.path:
 
 try:
     from core import answer_generator
+    from core.groq_service import stream_chat_completion, get_groq_client
     from core.mock_llm import MockMode, mock_service
     from core.rate_limiter import limiter, concurrency_manager
     from rag import search_papers
     from rag.citation_validator import validate_citations
 except ImportError:
     import answer_generator
+    from groq_service import stream_chat_completion, get_groq_client
     from mock_llm import MockMode, mock_service
     from rate_limiter import limiter, concurrency_manager
     import search_papers
@@ -82,6 +85,8 @@ class AskResponse(BaseModel):
     retries_attempted: int = 0
     latency_ms: float
     status: str
+    provider: Optional[str] = "groq"
+    model: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -102,14 +107,18 @@ def root():
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 def health():
-    """Health check endpoint checking retrieval assets."""
+    """Health check endpoint checking retrieval assets and provider status."""
     try:
         model, index, metadata = answer_generator.load_retrieval_pipeline()
+        groq_key = os.getenv("GROQ_API_KEY", "").strip()
+        groq_configured = bool(groq_key and groq_key != "your_groq_api_key_here")
         return {
             "status": "healthy",
             "indexed_vectors": index.ntotal,
             "metadata_records": len(metadata),
             "embedding_model": answer_generator.EMBEDDING_MODEL_NAME,
+            "groq_configured": groq_configured,
+            "groq_model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b") if groq_configured else None,
             "timestamp": time.time(),
         }
     except Exception as e:
@@ -176,20 +185,31 @@ async def ask(payload: AskRequest, request: Request, response: Response):
 
     # 3. Handle Streaming Response via Server-Sent Events (SSE)
     if payload.stream:
+        use_mock = payload.use_mock or (payload.mock_mode is not None)
         mode_val = payload.mock_mode.value if hasattr(payload.mock_mode, "value") else str(payload.mock_mode or "")
-        if mode_val == "RATE_LIMITED":
-            concurrency_manager.release()
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded (simulated daily quota exhaustion).",
-                headers={"Retry-After": "60"},
-            )
-        elif mode_val in ("FAILURE", "SERVER_ERROR"):
-            concurrency_manager.release()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Upstream server error (simulated).",
-            )
+
+        if use_mock:
+            if mode_val == "RATE_LIMITED":
+                concurrency_manager.release()
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded (simulated daily quota exhaustion).",
+                    headers={"Retry-After": "60"},
+                )
+            elif mode_val in ("FAILURE", "SERVER_ERROR"):
+                concurrency_manager.release()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Upstream server error (simulated).",
+                )
+        else:
+            groq_key = os.getenv("GROQ_API_KEY", "").strip()
+            if not groq_key or groq_key == "your_groq_api_key_here":
+                concurrency_manager.release()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Groq Cloud API key is not configured in .env. Please configure GROQ_API_KEY or select Mock mode in Settings.",
+                )
 
         try:
             model, index, metadata = answer_generator.load_retrieval_pipeline()
@@ -200,8 +220,22 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                 metadata=metadata,
                 top_k=payload.top_k,
             )
+
+            context_text = answer_generator.format_context_passages(chunks)
+            system_prompt = (
+                "You are an expert AI research assistant. Your task is to answer the user's question "
+                "using ONLY the retrieved research paper passages below. "
+                "Strict rules:\n"
+                "1. Answer ONLY based on the facts directly stated in the context.\n"
+                "2. If the context does not contain sufficient facts to answer the question, state: "
+                "'The answer cannot be found in the provided research papers.' Do not guess.\n"
+                "3. Every factual statement must cite its source passage in brackets: [Paper Name, p. X] or [Paper Name].\n"
+                "4. Be concise, technical, and mathematically precise."
+            )
+            user_prompt = f"Context passages:\n{context_text}\n\nQuestion: {clean_question}"
             prompt_messages = [
-                {"role": "user", "content": f"Context: {answer_generator.format_context_passages(chunks)}\n\nQuestion: {clean_question}"}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ]
 
             async def sse_event_generator():
@@ -209,28 +243,79 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                     init_data = json.dumps({"type": "init", "retrieved_chunks": len(chunks), "done": False})
                     yield f"data: {init_data}\n\n"
 
-                    async for token in mock_service.stream_response(prompt_messages, chunk_delay=0.03):
-                        if await request.is_disconnected():
-                            break
-                        chunk_data = json.dumps({"token": token, "done": False})
-                        yield f"data: {chunk_data}\n\n"
+                    stream_start = time.perf_counter()
+                    accumulated_tokens = []
 
-                        if payload.mock_mode == MockMode.SLOW:
-                            await asyncio.sleep(0.1)
+                    if use_mock:
+                        async for token in mock_service.stream_response(prompt_messages, chunk_delay=0.03):
+                            if await request.is_disconnected():
+                                break
+                            accumulated_tokens.append(token)
+                            chunk_data = json.dumps({"token": token, "done": False})
+                            yield f"data: {chunk_data}\n\n"
+
+                            if payload.mock_mode == MockMode.SLOW:
+                                await asyncio.sleep(0.1)
+
+                        full_content = mock_service._generate_mock_content(prompt_messages)
+                        provider_label = "mock"
+                        model_label = f"mock-{mode_val.lower() or 'normal'}"
+                    else:
+                        q = asyncio.Queue()
+                        loop = asyncio.get_running_loop()
+
+                        def groq_worker():
+                            try:
+                                for token in stream_chat_completion(prompt_messages):
+                                    asyncio.run_coroutine_threadsafe(q.put(token), loop).result()
+                            except Exception as ex:
+                                asyncio.run_coroutine_threadsafe(q.put(ex), loop).result()
+                            finally:
+                                asyncio.run_coroutine_threadsafe(q.put(None), loop).result()
+
+                        stream_thread = threading.Thread(target=groq_worker, daemon=True)
+                        stream_thread.start()
+
+                        while True:
+                            token_item = await q.get()
+                            if token_item is None:
+                                break
+                            if isinstance(token_item, Exception):
+                                raise token_item
+                            if await request.is_disconnected():
+                                break
+
+                            accumulated_tokens.append(token_item)
+                            chunk_data = json.dumps({"token": token_item, "done": False})
+                            yield f"data: {chunk_data}\n\n"
+
+                        full_content = "".join(accumulated_tokens).strip()
+                        provider_label = "groq"
+                        model_label = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
                     if not await request.is_disconnected():
-                        full_content = mock_service._generate_mock_content(prompt_messages)
                         val = validate_citations(full_content, chunks)
                         in_toks = sum(len(m.get("content", "").split()) for m in prompt_messages)
                         out_toks = len(full_content.split())
+                        latency_ms = round((time.perf_counter() - stream_start) * 1000, 2)
+
+                        final_status = "verified" if val["is_valid"] else "unverified"
+                        if val.get("validation_status") == "REFUSAL_VERIFIED":
+                            final_status = "REFUSAL_VERIFIED"
+
                         end_data = json.dumps({
                             "token": "",
                             "done": True,
+                            "answer": full_content,
                             "citations": val["validated_citations"],
-                            "status": "verified" if val["is_valid"] else "unverified",
+                            "status": final_status,
+                            "validation_status": val.get("validation_status", "VERIFIED"),
                             "input_tokens": in_toks,
                             "output_tokens": out_toks,
                             "retries_attempted": 0,
+                            "latency_ms": latency_ms,
+                            "provider": provider_label,
+                            "model": model_label,
                         })
                         yield f"data: {end_data}\n\n"
                 finally:
@@ -266,8 +351,21 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                 top_k=payload.top_k,
             )
 
+            context_text = answer_generator.format_context_passages(chunks)
+            system_prompt = (
+                "You are an expert AI research assistant. Your task is to answer the user's question "
+                "using ONLY the retrieved research paper passages below. "
+                "Strict rules:\n"
+                "1. Answer ONLY based on the facts directly stated in the context.\n"
+                "2. If the context does not contain sufficient facts to answer the question, state: "
+                "'The answer cannot be found in the provided research papers.' Do not guess.\n"
+                "3. Every factual statement must cite its source passage in brackets: [Paper Name, p. X] or [Paper Name].\n"
+                "4. Be concise, technical, and mathematically precise."
+            )
+            user_prompt = f"Context passages:\n{context_text}\n\nQuestion: {clean_question}"
             prompt_messages = [
-                {"role": "user", "content": f"Context: {answer_generator.format_context_passages(chunks)}\n\nQuestion: {clean_question}"}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ]
             mock_res = await mock_service.generate_response(
                 messages=prompt_messages,
@@ -283,6 +381,10 @@ async def ask(payload: AskRequest, request: Request, response: Response):
             val = validate_citations(mock_res["content"], chunks)
             total_lat = round((time.perf_counter() - start_t) * 1000, 2)
 
+            final_status = "verified" if val["is_valid"] else "unverified"
+            if val.get("validation_status") == "REFUSAL_VERIFIED":
+                final_status = "REFUSAL_VERIFIED"
+
             return AskResponse(
                 question=clean_question,
                 answer=mock_res["content"],
@@ -294,9 +396,18 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                 output_tokens=mock_res["output_tokens"],
                 retries_attempted=mock_res.get("retries_attempted", 0),
                 latency_ms=total_lat,
-                status="verified" if val["is_valid"] else "unverified",
+                status=final_status,
+                provider="mock",
+                model=mock_res.get("model", "mock-normal"),
             )
         else:
+            groq_key = os.getenv("GROQ_API_KEY", "").strip()
+            if not groq_key or groq_key == "your_groq_api_key_here":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Groq Cloud API key is not configured in .env. Please configure GROQ_API_KEY or select Mock mode in Settings.",
+                )
+
             result = answer_generator.answer_question(
                 question=clean_question,
                 top_k=payload.top_k,
@@ -307,6 +418,10 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=result["answer"],
                 )
+
+            final_status = "verified" if result["is_valid"] else "unverified"
+            if result.get("validation", {}).get("validation_status") == "REFUSAL_VERIFIED":
+                final_status = "REFUSAL_VERIFIED"
 
             return AskResponse(
                 question=clean_question,
@@ -319,7 +434,9 @@ async def ask(payload: AskRequest, request: Request, response: Response):
                 output_tokens=result["output_tokens"],
                 retries_attempted=result.get("retries_attempted", 0),
                 latency_ms=result["latency_ms"],
-                status=result["status"],
+                status=final_status,
+                provider="groq",
+                model=result.get("model", os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")),
             )
 
     except HTTPException:

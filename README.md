@@ -63,6 +63,16 @@ The-Relay/
 │   ├── extract_papers.py                      # PDF text extraction with PyMuPDF
 │   ├── generate_embeddings.py                 # SentenceTransformers all-MiniLM-L6-v2 embeddings
 │   └── search_papers.py                       # FAISS IndexFlatIP cosine search & hybrid reranker
+├── frontend/
+│   ├── src/
+│   │   ├── components/                        # React UI: Dashboard, ChatView, PapersLibrary, ApiStatusView, SettingsView, Sidebar, Header
+│   │   ├── services/
+│   │   │   └── api.js                         # SSE streaming client & REST backend connector
+│   │   ├── App.jsx                            # State orchestration & persistent history/settings
+│   │   ├── main.jsx                           # React root mount
+│   │   └── index.css                          # Tailwind CSS v4 styling & dark theme prose
+│   ├── package.json                           # React 19, Lucide icons, React Markdown, Tailwind CSS
+│   └── vite.config.js                         # Vite configuration & dev proxy to backend :8000
 ├── papers/
 │   ├── attention_is_all_you_need_v7.pdf       # arXiv:1706.03762 v7
 │   ├── dynamic_chunking_v2.pdf                # arXiv:2507.07955 v2
@@ -208,7 +218,55 @@ Once started:
 
 ---
 
-## 8. How to Run Each Test Suite
+## 8. Frontend Web Interface (React + Vite + Tailwind CSS)
+
+The Relay includes a complete, modern AI research assistant web interface located in `frontend/`. Inspired by Perplexity and ChatGPT, it provides researchers with an interactive graphical workspace over the three indexed machine learning papers.
+
+### 8.1 Key Features
+- **Dashboard & Suggested Queries**: Hero search box, active configuration pills, and one-click quick-start prompts mapped to the 3 research papers.
+- **Progressive SSE Streaming Chat**: Real-time token-by-token streaming via `POST /ask/stream` with pulsing cursor, markdown table/formula support, and live latency/token counters.
+- **Citation Cards & Grounding Audits**: Inspect each citation with interactive badges (`VERIFIED`, `REFUSAL VERIFIED`, `UNVERIFIED`) and expandable source passage drawers showing cosine similarity and chunk page numbers.
+- **Research Papers Library**: Interactive catalog of the 3 indexed papers (*Attention Is All You Need*, *Moshi*, *Dynamic Chunking*) with abstracts, key architectural concepts, and direct question prompts.
+- **Live Telemetry & System Status**: Live monitoring view displaying active backend health, indexed FAISS vector counts (215 vectors), rate limit ceilings, concurrency queues, and endpoint inventory.
+- **Control & Settings Panel**: Adjust Top-K retrieval (1 to 10), toggle SSE streaming, switch between deterministic Mock LLM and live Groq Cloud API, test stand-in operational modes (`NORMAL`, `SLOW`, `OVERLOAD`, `FAILURE`, etc.), and manage search history.
+
+### 8.2 How to Run Backend and Frontend
+
+Run the Python backend and Vite frontend concurrently in two separate terminal windows:
+
+#### Terminal 1 — Start the Backend Server (FastAPI)
+```powershell
+# From project root
+.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+The FastAPI backend will be available at `http://127.0.0.1:8000`.
+
+#### Terminal 2 — Start the Frontend Dev Server (React + Vite)
+```powershell
+# Navigate to frontend and start Vite
+cd frontend
+npm install
+npm run dev
+```
+Open your browser and navigate to:
+```text
+http://localhost:5173
+```
+
+> [!NOTE]
+> `frontend/vite.config.js` includes an automatic reverse proxy forwarding `/ask`, `/ask/stream`, `/health`, and `/metrics` directly to `http://127.0.0.1:8000`. This enables full SSE streaming without requiring any CORS modifications on the Python backend.
+
+#### Production Build
+To create an optimized production build of the frontend:
+```powershell
+cd frontend
+npm run build
+npm run preview
+```
+
+---
+
+## 9. How to Run Each Test Suite
 
 Run individual test suites from the project root:
 
@@ -239,9 +297,9 @@ Run all tests via Pytest:
 
 ---
 
-## 9. How to Run Experiments
+## 10. How to Run Experiments
 
-### 9.1 Load Testing (`experiments/load_tests/load_test.py`)
+### 10.1 Load Testing (`experiments/load_tests/load_test.py`)
 ```powershell
 # Run steady load scenario with stand-in
 .\venv\Scripts\python.exe experiments/load_tests/load_test.py --scenario steady --source stand-in
@@ -256,19 +314,19 @@ Run all tests via Pytest:
 .\venv\Scripts\python.exe experiments/load_tests/load_test.py --scenario all --source stand-in --in-process
 ```
 
-### 9.2 Retrieval Experiments (`experiments/retrieval/experiment_retrieval.py`)
+### 10.2 Retrieval Experiments (`experiments/retrieval/experiment_retrieval.py`)
 Compares Setting A (250t, Top-6, No Rerank), Setting B (500t, Top-4, No Rerank), and Setting C (500t, Top-8, Hybrid Rerank):
 ```powershell
 .\venv\Scripts\python.exe experiments/retrieval/experiment_retrieval.py --source stand-in
 ```
 
-### 9.3 Answer Quality Evaluation (`experiments/evaluation/evaluate_answers.py`)
+### 10.3 Answer Quality Evaluation (`experiments/evaluation/evaluate_answers.py`)
 Evaluates 15 research queries with four-tier correctness and citation audits:
 ```powershell
 .\venv\Scripts\python.exe experiments/evaluation/evaluate_answers.py --source stand-in
 ```
 
-### 9.4 Metric Consolidation & Report Calculation (`scripts/`)
+### 10.4 Metric Consolidation & Report Calculation (`scripts/`)
 ```powershell
 # Audit and calculate Table 2a, 2b, and Table 3 report statistics
 .\venv\Scripts\python.exe scripts/calculate_report_metrics.py
@@ -279,7 +337,7 @@ Evaluates 15 research queries with four-tier correctness and citation audits:
 
 ---
 
-## 10. Where to Find Reports and Raw CSV Results
+## 11. Where to Find Reports and Raw CSV Results
 
 ### Final Reports
 - **Markdown Report**: [`reports/final_report.md`](reports/final_report.md)
@@ -295,7 +353,7 @@ Evaluates 15 research queries with four-tier correctness and citation audits:
 
 ---
 
-## 11. API Endpoints & Swagger Documentation
+## 12. API Endpoints & Swagger Documentation
 
 | Method | Endpoint | Description | Status Code |
 | :--- | :--- | :--- | :---: |
@@ -352,6 +410,6 @@ Evaluates 15 research queries with four-tier correctness and citation audits:
 
 ---
 
-## 12. License
+## 13. License
 
 This project is licensed under the [MIT License](LICENSE).

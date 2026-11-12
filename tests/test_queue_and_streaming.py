@@ -80,6 +80,7 @@ def test_streaming_sse_output():
     print("  2. TESTING SERVER-SENT EVENTS (SSE) STREAMING")
     print("=" * 66)
 
+    limiter.reset()
     payload = {
         "question": "What is the Transformer architecture?",
         "use_mock": True,
@@ -123,6 +124,7 @@ def test_client_disconnection():
     print("  3. TESTING CLIENT DISCONNECTION AND CLEANUP")
     print("=" * 66)
 
+    limiter.reset()
     initial_active = concurrency_manager.active_count
 
     payload = {
@@ -157,6 +159,7 @@ def test_existing_normal_endpoint():
     print("  4. TESTING EXISTING NORMAL ENDPOINT COMPATIBILITY")
     print("=" * 66)
 
+    limiter.reset()
     payload = {
         "question": "What is dynamic chunking?",
         "use_mock": True,

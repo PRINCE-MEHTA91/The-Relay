@@ -217,6 +217,50 @@ def send_chat_completion(
     }
 
 
+def stream_chat_completion(
+    messages: List[Dict[str, str]],
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_output_tokens: Optional[int] = None,
+    max_input_tokens: Optional[int] = None,
+    timeout_seconds: Optional[float] = None,
+    client: Optional[Any] = None,
+):
+    """Stream token deltas directly from Groq Cloud API."""
+    selected_model = model or os.getenv("GROQ_MODEL", DEFAULT_MODEL)
+    temp = DEFAULT_TEMPERATURE if temperature is None else temperature
+    out_tokens = DEFAULT_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
+    in_tokens_limit = DEFAULT_MAX_INPUT_TOKENS if max_input_tokens is None else max_input_tokens
+    req_timeout = DEFAULT_TIMEOUT if timeout_seconds is None else timeout_seconds
+
+    # Token budget pre-check
+    total_prompt_text = " ".join(m.get("content", "") for m in messages)
+    estimated_in_tokens = estimate_tokens(total_prompt_text)
+    if estimated_in_tokens > in_tokens_limit:
+        raise ValueError(
+            f"Token budget exceeded: input has ~{estimated_in_tokens} tokens (max allowed: {in_tokens_limit})."
+        )
+
+    if client is None:
+        client = get_groq_client()
+
+    call_kwargs = {
+        "model": selected_model,
+        "messages": messages,
+        "temperature": temp,
+        "max_tokens": out_tokens,
+        "timeout": req_timeout,
+        "stream": True,
+    }
+    if "gpt-oss" in selected_model:
+        call_kwargs["extra_body"] = {"reasoning_effort": "low"}
+
+    response_stream = client.chat.completions.create(**call_kwargs)
+    for chunk in response_stream:
+        if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+
 def get_token_metrics() -> Dict[str, int]:
     """Return cumulative token usage and request counters."""
     return dict(CUMULATIVE_TOKEN_USAGE)
@@ -236,4 +280,7 @@ class GroqService:
 
     def complete(self, messages: List[Dict[str, str]], **kwargs) -> Dict[str, Any]:
         return send_chat_completion(messages, model=self.model, client=self.client, **kwargs)
+
+    def stream(self, messages: List[Dict[str, str]], **kwargs):
+        return stream_chat_completion(messages, model=self.model, client=self.client, **kwargs)
 
