@@ -85,7 +85,17 @@ tmp/
 *.temp
 *.bak
 
-# Testing and coverage caches
+# Testing, test suites, and test caches (not required for deployment/deliverables)
+tests/
+test_*.py
+*_test.py
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.jsx
+__tests__/
 .pytest_cache/
 .coverage
 htmlcov/

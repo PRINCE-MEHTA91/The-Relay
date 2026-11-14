@@ -1,0 +1,121 @@
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Secret keys and environment files (keep .env.example only)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json
+auth.json
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.pyc
+
+# Distribution and builds
+dist/
+build/
+*.egg-info/
+*.egg
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.sublime-project
+*.sublime-workspace
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Downloaded research papers and PDFs
+papers/
+*.pdf
+!final_report.pdf
+!reports/final_report.pdf
+!reports/*.pdf
+
+# Auto-generated extracted text
+extracted_text/
+data/extracted_text/
+
+# Auto-generated FAISS index and vector metadata
+processed/
+data/embeddings/*.npy
+data/embeddings/*.bin
+data/processed/*.npy
+data/processed/*.bin
+*.npy
+*.bin
+*.faiss
+*.pkl
+
+# HuggingFace and PyTorch caches
+.cache/
+hf_cache/
+models/
+
+# Scratch and temporary scripts
+scratch/
+temp/
+tmp/
+*.tmp
+*.temp
+*.bak
+
+# Testing, test suites, and test caches (not required for deployment/deliverables)
+tests/
+test_*.py
+*_test.py
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.jsx
+__tests__/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Application and server logs
+*.log
+logs/
+*.out
+*.pid
+
+# CSV test and load run files (keep only the required assignment results and deliverables)
+*.csv
+!results.csv
+!results_load.csv
+!results_stream.csv
+!retrieval_experiments.csv
+!answer_evaluation.csv
+!retrieval_streaming_experiments.csv
+!results/**/*.csv
+!results/*.csv
