@@ -16,6 +16,24 @@ FALLBACK_PROCESSED = PROJECT_ROOT / "processed"
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 TOP_K = 5
+DEFAULT_RELEVANCE_THRESHOLD = float(os.getenv("RAG_RELEVANCE_THRESHOLD", "0.38"))
+
+PAPER_ID_MAP = {
+    "attention is all you need": "1706.03762v7",
+    "moshi": "2410.00037v1",
+    "dynamic chunking for end-to-end hierarchical sequence modeling": "2507.07955v2",
+    "dynamic chunking for rag": "2507.07955v2",
+    "dynamic chunking": "2507.07955v2",
+}
+
+
+def get_paper_id(paper_name: str) -> str:
+    """Return canonical arXiv paper ID for a given paper title."""
+    name_clean = paper_name.lower().strip()
+    for key, pid in PAPER_ID_MAP.items():
+        if key in name_clean or name_clean in key:
+            return pid
+    return "arxiv-doc"
 
 
 def get_embeddings_path() -> Path:
@@ -53,6 +71,7 @@ def search(
     index: faiss.Index,
     metadata: list[dict],
     top_k: int = TOP_K,
+    score_threshold: float | None = None,
 ) -> list[dict]:
     """Embed query, normalize, search FAISS index and map to chunk metadata."""
     if not query.strip():
@@ -72,11 +91,18 @@ def search(
         if idx == -1:
             continue
         chunk = metadata[idx]
+        val_score = round(float(score), 4)
+        if score_threshold is not None and val_score < score_threshold:
+            continue
+        p_name = chunk["paper_name"]
+        p_id = chunk.get("paper_id") or get_paper_id(p_name)
         results.append({
             "chunk_id":    chunk["chunk_id"],
-            "paper_name":  chunk["paper_name"],
+            "paper_id":    p_id,
+            "paper_name":  p_name,
+            "paper_title": p_name,
             "page_number": chunk.get("page_number", "N/A"),
-            "score":       round(float(score), 4),
+            "score":       val_score,
             "text":        chunk["text"],
         })
     return results

@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   X,
   Sparkles,
+  Globe,
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -26,7 +27,8 @@ export default function Sidebar({
   setMobileOpen,
 }) {
   const navItems = [
-    { id: 'chat', label: 'Research Chat', icon: MessageSquare },
+    { id: 'autonomous', label: 'Autonomous Research', icon: Globe, badge: 'Agent' },
+    { id: 'chat', label: 'Corpus Q&A (3 Papers)', icon: MessageSquare },
     { id: 'papers', label: 'Papers Library', icon: BookOpen, badge: '3' },
     { id: 'status', label: 'API Status & Metrics', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },

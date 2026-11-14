@@ -85,6 +85,25 @@ class MockLLMService:
         if "question:" in target:
             target = target.split("question:")[-1].strip()
 
+        # Extract available pages per paper from prompt context passages
+        available_pages: Dict[str, List[int]] = {}
+        import re
+        for m in messages:
+            txt = m.get("content", "")
+            for block in re.finditer(r"Paper:\s*([^\n]+)\nPage:\s*(\d+)", txt):
+                p_name = block.group(1).strip()
+                p_page = int(block.group(2))
+                available_pages.setdefault(p_name, []).append(p_page)
+
+        def get_page(paper_key: str, preferred: int) -> int:
+            for p_cand, pages in available_pages.items():
+                if paper_key.lower() in p_cand.lower():
+                    if preferred in pages or any(abs(preferred - p) <= 1 for p in pages):
+                        return preferred
+                    if pages:
+                        return pages[0]
+            return preferred
+
         # 1. Out-of-domain / unanswerable questions (negative controls & explicit refusals)
         out_of_domain_terms = [
             "recipe", "croissant", "quantum", "syndrome", "gpt-4o", "fault-tolerant",
@@ -94,41 +113,81 @@ class MockLLMService:
         if any(term in target for term in out_of_domain_terms):
             return "The answer cannot be found in the provided research papers."
 
-        # 2. Attention & Transformer Questions
-        if "scaled dot-product" in target or ("formula" in target and "attention" in target):
-            return "Scaled dot-product attention computes outputs as Attention(Q, K, V) = softmax(QK^T / sqrt(d_k))V [Attention Is All You Need, p. 4]."
+        # 2. Cross-Paper Comparative Reasoning (Separate Source Attribution)
+        # Evaluated before single-paper checks so multi-topic comparisons are handled first.
+        if ("transformer" in target or "attention" in target) and ("dynamic chunking" in target or "hierarchical" in target):
+            pg_att = get_page("Attention Is All You Need", 3)
+            pg_dc = get_page("Dynamic Chunking", 1)
+            return (
+                f"The Transformer employs full self-attention across all tokens in a sequence [Attention Is All You Need, p. {pg_att}]. "
+                f"In contrast, Dynamic Chunking introduces learned variable-length segmentation to compress sequences hierarchically "
+                f"before computing higher-level representations [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. {pg_dc}]."
+            )
+        elif ("transformer" in target or "attention" in target) and "moshi" in target:
+            pg_att = get_page("Attention Is All You Need", 3)
+            pg_mo = get_page("Moshi", 1)
+            return (
+                f"The Transformer uses an encoder-decoder architecture with self-attention for text sequence transduction [Attention Is All You Need, p. {pg_att}]. "
+                f"Moshi builds upon text transformers by integrating Helium and the Mimi audio codec for real-time full-duplex spoken dialogue [Moshi, p. {pg_mo}]."
+            )
+        elif "moshi" in target and ("dynamic chunking" in target or "hierarchical" in target):
+            pg_mo = get_page("Moshi", 1)
+            pg_dc = get_page("Dynamic Chunking", 1)
+            return (
+                f"Moshi operates on multi-stream audio-text codec tokens for conversational speech [Moshi, p. {pg_mo}]. "
+                f"Dynamic Chunking focuses on adaptive hierarchical text segmentation using routing modules [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. {pg_dc}]."
+            )
+
+        # 3. Attention & Transformer Questions
+        elif "scaled dot-product" in target or ("formula" in target and "attention" in target):
+            pg = get_page("Attention Is All You Need", 4)
+            return f"Scaled dot-product attention computes outputs as Attention(Q, K, V) = softmax(QK^T / sqrt(d_k))V [Attention Is All You Need, p. {pg}]."
         elif "computational complexity" in target or ("per-layer" in target and "complexity" in target):
-            return "Self-attention has per-layer complexity O(n^2 * d) while recurrent layers have O(n * d^2) [Attention Is All You Need, p. 6]."
+            pg = get_page("Attention Is All You Need", 6)
+            return f"Self-attention has per-layer complexity O(n^2 * d) while recurrent layers have O(n * d^2) [Attention Is All You Need, p. {pg}]."
         elif "multi-head attention" in target or "multi head attention" in target or ("multi-head" in target and "attention" in target):
-            return "Multi-Head Attention projects queries, keys, and values into multiple lower-dimensional representation subspaces in parallel before concatenating and projecting outputs [Attention Is All You Need, p. 4]."
+            pg = get_page("Attention Is All You Need", 4)
+            return f"Multi-Head Attention projects queries, keys, and values into multiple lower-dimensional representation subspaces in parallel before concatenating and projecting outputs [Attention Is All You Need, p. {pg}]."
         elif "transformer" in target and "architecture" in target:
-            return "The Transformer uses an encoder-decoder architecture with stacked self-attention and feed-forward sublayers [Attention Is All You Need, p. 3]."
+            pg = get_page("Attention Is All You Need", 3)
+            return f"The Transformer uses an encoder-decoder architecture with stacked self-attention and feed-forward sublayers [Attention Is All You Need, p. {pg}]."
         elif "self-attention" in target:
-            return "Self-attention maps query, key, and value vectors to compute attention weights via scaled dot-products [Attention Is All You Need, p. 4]."
+            pg = get_page("Attention Is All You Need", 4)
+            return f"Self-attention maps query, key, and value vectors to compute attention weights via scaled dot-products [Attention Is All You Need, p. {pg}]."
 
         # 3. Moshi Foundation Model Questions
         elif "helium" in target or ("parameter count" in target and "moshi" in target) or ("base text" in target and "moshi" in target):
-            return "Moshi is built on Helium, a 7B-parameter text language model built from scratch [Moshi, p. 7]."
+            pg = get_page("Moshi", 7)
+            return f"Moshi is built on Helium, a 7B-parameter text language model built from scratch [Moshi, p. {pg}]."
         elif "neural audio codec" in target or "mimi" in target or "quantization" in target:
-            return "Moshi uses the Mimi neural audio codec implementing split residual vector quantization (RVQ) [Moshi, p. 10]."
+            pg = get_page("Moshi", 10)
+            return f"Moshi uses the Mimi neural audio codec implementing split residual vector quantization (RVQ) [Moshi, p. {pg}]."
         elif ("user and system" in target or "audio stream" in target) and "moshi" in target:
-            return "Moshi structures user and system audio as separate parallel audio codec streams [Moshi, p. 6]."
+            pg = get_page("Moshi", 6)
+            return f"Moshi structures user and system audio as separate parallel audio codec streams [Moshi, p. {pg}]."
         elif "moshi" in target and ("interaction" in target or "conversational" in target or "spoken" in target or "dialogue" in target or "real-time" in target):
-            return "Moshi is a speech-text foundation model enabling real-time full-duplex spoken dialogue where it simultaneously listens and speaks [Moshi, p. 1]."
+            pg = get_page("Moshi", 1)
+            return f"Moshi is a speech-text foundation model enabling real-time full-duplex spoken dialogue where it simultaneously listens and speaks [Moshi, p. {pg}]."
         elif "moshi" in target:
-            return "Moshi is a real-time speech-text foundation model enabling full-duplex spoken dialogue using separate audio codec streams [Moshi, p. 1]."
+            pg = get_page("Moshi", 1)
+            return f"Moshi is a real-time speech-text foundation model enabling full-duplex spoken dialogue using separate audio codec streams [Moshi, p. {pg}]."
 
         # 4. Dynamic Chunking Paper Questions
         elif "routing module" in target or ("boundary" in target and "module" in target):
-            return "The Routing Module determines boundary positions using confidence scores in dynamic chunking [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. 3]."
+            pg = get_page("Dynamic Chunking", 3)
+            return f"The Routing Module determines boundary positions using confidence scores in dynamic chunking [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. {pg}]."
         elif "smoothing module" in target or ("smoothing" in target and "differentiable" in target):
-            return "The smoothing module smooths boundary decisions to make hierarchical chunking differentiable for end-to-end training [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. 3]."
+            pg = get_page("Dynamic Chunking", 3)
+            return f"The smoothing module smooths boundary decisions to make hierarchical chunking differentiable for end-to-end training [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. {pg}]."
         elif "width scale" in target or "monotone" in target or "d_0" in target:
-            return "Model width scales monotonically across hierarchical stages D_0 <= D_1 <= ... <= D_S [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. 6]."
+            pg = get_page("Dynamic Chunking", 6)
+            return f"Model width scales monotonically across hierarchical stages D_0 <= D_1 <= ... <= D_S [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. {pg}]."
         elif "dynamic chunking" in target and "hierarchical" in target:
-            return "Dynamic chunking is an adaptive segmentation method that learns variable-length chunk boundaries dynamically [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. 1]."
+            pg = get_page("Dynamic Chunking", 1)
+            return f"Dynamic chunking is an adaptive segmentation method that learns variable-length chunk boundaries dynamically [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. {pg}]."
         elif "dynamic chunking" in target:
-            return "Dynamic chunking segments text adaptively using boundary scoring modules rather than fixed-width splits [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. 7]."
+            pg = get_page("Dynamic Chunking", 1)
+            return f"Dynamic chunking segments text adaptively using boundary scoring modules rather than fixed-width splits [Dynamic Chunking for End-to-End Hierarchical Sequence Modeling, p. {pg}]."
 
         # 5. Default Fallback for Unrecognized / Out-of-Corpus Queries
         else:

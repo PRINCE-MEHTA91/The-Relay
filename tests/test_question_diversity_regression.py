@@ -111,3 +111,4 @@ def test_groq_mode_configuration_and_diversity():
     assert "cannot be found in the provided research papers" in res_groq_d["answer"]
     assert res_groq_a["is_valid"] is True
     assert res_groq_d["is_valid"] is True
+

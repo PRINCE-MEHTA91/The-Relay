@@ -9,6 +9,8 @@ import {
   RotateCcw,
   Sparkles,
   Info,
+  Globe,
+  FileText,
 } from 'lucide-react';
 
 export default function SettingsView({
@@ -41,6 +43,62 @@ export default function SettingsView({
         </div>
 
         <div className="space-y-6">
+          {/* Research Engine Mode Card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl backdrop-blur-md">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-4 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-sky-400" />
+              Research Engine Mode
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setSettings((prev) => ({ ...prev, research_mode: 'autonomous' }))}
+                className={`flex flex-col text-left rounded-xl p-4 border transition-all ${
+                  settings.research_mode !== 'corpus'
+                    ? 'border-sky-500 bg-sky-950/20 text-white shadow-md'
+                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    <Globe className="h-4 w-4 text-sky-400" />
+                    <span>Autonomous Academic Agent</span>
+                  </span>
+                  <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-semibold text-sky-400">
+                    Live Web Discovery
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Autonomously discovers research papers across arXiv, Semantic Scholar, and Crossref, downloads open-access PDFs, builds in-memory FAISS embeddings, and synthesizes answers.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettings((prev) => ({ ...prev, research_mode: 'corpus' }))}
+                className={`flex flex-col text-left rounded-xl p-4 border transition-all ${
+                  settings.research_mode === 'corpus'
+                    ? 'border-amber-500 bg-amber-950/20 text-white shadow-md'
+                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-amber-400" />
+                    <span>Corpus Q&A (3 Papers)</span>
+                  </span>
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                    Local 3-Paper RAG
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Constrained RAG strictly over the 3 local foundational papers (Attention Is All You Need, Moshi, Dynamic Chunking). Out-of-domain questions will trigger a calibrated refusal.
+                </p>
+              </button>
+            </div>
+          </div>
+
           {/* Retrieval Parameters Card */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl backdrop-blur-md">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-4 flex items-center gap-2">

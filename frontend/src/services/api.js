@@ -197,3 +197,112 @@ export function streamQuestion(
   return controller;
 }
 
+/**
+ * Fetch supported academic repositories (/research/sources)
+ */
+export async function fetchResearchSources() {
+  const res = await fetch(`${API_BASE_URL}/research/sources`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch academic sources: HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+/**
+ * Autonomously search academic literature without synthesis (/research/search)
+ * @param {Object} params
+ * @param {string} params.question
+ * @param {string[]} [params.sources]
+ * @param {number} [params.max_results_per_source]
+ * @param {boolean} [params.use_mock]
+ */
+export async function searchAcademicLiterature({
+  question,
+  sources = ['arxiv', 'semantic_scholar', 'crossref'],
+  max_results_per_source = 5,
+  use_mock = false,
+}) {
+  const payload = {
+    question: question.trim(),
+    sources,
+    max_results_per_source,
+    use_mock,
+  };
+
+  const res = await fetch(`${API_BASE_URL}/research/search`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    let errDetail = `Server returned HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      errDetail = errJson.detail || errDetail;
+    } catch {
+      // ignore
+    }
+    const err = new Error(errDetail);
+    err.status = res.status;
+    throw err;
+  }
+
+  return await res.json();
+}
+
+/**
+ * Conduct end-to-end autonomous research: query expansion -> literature search -> PDF download -> in-memory indexing -> synthesis (/research/answer)
+ * @param {Object} params
+ * @param {string} params.question
+ * @param {number} [params.max_papers]
+ * @param {string[]} [params.sources]
+ * @param {number} [params.top_k_evidence]
+ * @param {boolean} [params.use_mock]
+ */
+export async function fetchResearchAnswer({
+  question,
+  max_papers = 3,
+  sources = ['arxiv', 'semantic_scholar', 'crossref'],
+  top_k_evidence = 6,
+  use_mock = false,
+}) {
+  const payload = {
+    question: question.trim(),
+    max_papers,
+    sources,
+    top_k_evidence,
+    use_mock,
+  };
+
+  const res = await fetch(`${API_BASE_URL}/research/answer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    let errDetail = `Server returned HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      errDetail = errJson.detail || errDetail;
+    } catch {
+      // ignore
+    }
+    const err = new Error(errDetail);
+    err.status = res.status;
+    throw err;
+  }
+
+  return await res.json();
+}
+
+

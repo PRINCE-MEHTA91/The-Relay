@@ -11,20 +11,31 @@ KNOWN_PAPERS = [
     "Dynamic Chunking for RAG",
 ]
 
-# Regex pattern for citations: [Paper Name, p. X] or [Paper Name, page X] or [Paper Name]
+# Regex pattern for citations: [Paper Name, p. X] or [Paper Name, page X] or [Paper Name] or [Paper Name: p. X] or [Paper Name, pp. X-Y]
+# Supports Unicode non-breaking hyphens (\u2011), en-dashes (\u2013), em-dashes (\u2014), and any paper title within brackets
 CITATION_REGEX = re.compile(
-    r"\[([A-Za-z0-9\s:\-_]+?)(?:,\s*(?:p\.|page|pg\.)\s*(\d+))?\]",
+    r"\[([^,\]]+?)(?:[,:]\s*(?:pp?\.|pages?|pgs?\.?)\s*(\d+)(?:[-–—\u2011\u2013\u2014]\d+)?)?\]",
     re.IGNORECASE,
 )
 
 # Standard refusal phrases for unsupported questions
 REFUSAL_PHRASES = [
+    "the available research papers do not contain sufficient information",
+    "the available research papers do not contain",
+    "available research papers do not contain sufficient information",
+    "available research papers do not contain",
+    "the answer cannot be found in the provided research papers",
+    "the answer cannot be found in the provided",
+    "the answer cannot be found",
     "cannot be found in the provided research papers",
     "cannot be found in the provided",
+    "cannot be found",
     "not found in the provided research papers",
+    "not found in the provided",
     "the provided passages do not contain",
     "does not contain sufficient information",
     "no information provided",
+    "no relevant research paper passages",
 ]
 
 # Common English stop words for content-word overlap checks
@@ -58,16 +69,35 @@ def matches_paper_name(cited_name: str, candidate_name: str) -> bool:
     return norm_cited == norm_cand or norm_cited in norm_cand or norm_cand in norm_cited
 
 
-def parse_citations(text: str) -> List[Dict[str, Any]]:
-    """Extract all in-text citations [Paper, p. X] from the text."""
+def parse_citations(
+    text: str,
+    retrieved_chunks: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Extract all in-text citations [Paper, p. X] or [Passage X] from the text."""
     citations = []
     for match in CITATION_REGEX.finditer(text):
         paper_raw = match.group(1).strip()
         page_raw = match.group(2)
         page_num = int(page_raw) if page_raw else None
 
-        # Filter out false positives like [1], [Passage 1]
-        if paper_raw.lower().startswith("passage") or paper_raw.isdigit():
+        # Check for [Passage X] or [Chunk X] references
+        p_lower = paper_raw.lower()
+        if p_lower.startswith("passage") or p_lower.startswith("chunk") or paper_raw.isdigit():
+            idx_digits = re.findall(r"\d+", paper_raw)
+            if idx_digits and retrieved_chunks:
+                p_idx = int(idx_digits[0])
+                if 1 <= p_idx <= len(retrieved_chunks):
+                    chunk = retrieved_chunks[p_idx - 1]
+                    resolved_paper = chunk.get("paper_name", paper_raw)
+                    resolved_page = page_num if page_num is not None else chunk.get("page_number")
+                    if str(resolved_page).isdigit():
+                        resolved_page = int(resolved_page)
+                    citations.append({
+                        "raw_citation": match.group(0),
+                        "paper_name": resolved_paper,
+                        "page_number": resolved_page,
+                    })
+                    continue
             continue
 
         citations.append({
@@ -103,11 +133,12 @@ def verify_citation_metadata(
     # Map retrieved paper names to their covered pages and chunk IDs
     retrieved_papers: Dict[str, Dict[str, Any]] = {}
     for chunk in retrieved_chunks:
-        p_name = chunk.get("paper_name", "")
+        p_name = chunk.get("paper_name") or chunk.get("paper_title", "")
         norm_p = normalize_title(p_name)
         if norm_p not in retrieved_papers:
             retrieved_papers[norm_p] = {
                 "display_name": p_name,
+                "paper_id": chunk.get("paper_id", ""),
                 "pages": set(),
                 "chunks": [],
             }
@@ -124,7 +155,7 @@ def verify_citation_metadata(
         # 1. Match paper title against retrieved chunks
         matched_key = None
         for r_norm, r_data in retrieved_papers.items():
-            if matches_paper_name(cited_paper, r_data["display_name"]):
+            if matches_paper_name(cited_paper, r_data["display_name"]) or (r_data.get("paper_id") and cited_paper.lower() == r_data["paper_id"].lower()):
                 matched_key = r_norm
                 break
 
@@ -140,7 +171,20 @@ def verify_citation_metadata(
 
         # 2. Match page number if specified
         if cited_page is not None:
-            if available_pages and cited_page not in available_pages:
+            page_matched = False
+            if cited_page in available_pages:
+                page_matched = True
+            elif any(abs(cited_page - p) <= 1 for p in available_pages):
+                # Tolerance of +/- 1 page for overlapping chunk windows
+                page_matched = True
+            else:
+                for c in paper_data["chunks"]:
+                    txt = c.get("text", "").lower()
+                    if f"page {cited_page}" in txt or f"p. {cited_page}" in txt or f"p.{cited_page}" in txt:
+                        page_matched = True
+                        break
+
+            if not page_matched and available_pages:
                 sorted_pages = sorted(list(available_pages))
                 errors.append(
                     f"Page mismatch for '{paper_data['display_name']}': cited page {cited_page}, "
@@ -165,6 +209,24 @@ def verify_citation_metadata(
     return validated, errors
 
 
+# Preamble and framing phrases that do not constitute technical claims
+FRAMING_PREFIXES = [
+    "based on the provided",
+    "based on the retrieved",
+    "according to the provided",
+    "according to the retrieved",
+    "in the provided research",
+    "in the provided passages",
+    "in the retrieved passages",
+    "the retrieved research papers indicate",
+    "as stated in the",
+    "as described in the",
+    "the paper explains",
+    "here is the summary",
+    "to answer your question",
+]
+
+
 def check_claim_support(
     answer: str,
     retrieved_chunks: List[Dict[str, Any]],
@@ -182,8 +244,13 @@ def check_claim_support(
     unsupported = []
 
     for sentence in sentences:
+        s_lower = sentence.lower()
         # Skip refusal / meta statements
-        if any(refusal in sentence.lower() for refusal in REFUSAL_PHRASES):
+        if any(refusal in s_lower for refusal in REFUSAL_PHRASES):
+            continue
+        if any(s_lower.startswith(prefix) for prefix in FRAMING_PREFIXES):
+            continue
+        if sentence.strip().endswith("?"):
             continue
 
         claim_words = extract_content_words(sentence)
@@ -235,7 +302,7 @@ def validate_citations(
         }
 
     # Case 3: Parse citations from answer
-    citations = parse_citations(answer)
+    citations = parse_citations(answer, retrieved_chunks=retrieved_chunks)
     if not citations and citation_metadata:
         citations = citation_metadata
 

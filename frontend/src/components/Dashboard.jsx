@@ -9,9 +9,10 @@ import {
   ShieldCheck,
   Zap,
   Sliders,
+  Globe,
 } from 'lucide-react';
 
-export default function Dashboard({ onSearch, settings, onOpenSettings, onOpenPapers }) {
+export default function Dashboard({ onSearch, settings, onOpenSettings, onOpenPapers, onOpenAutonomous }) {
   const [question, setQuestion] = useState('');
 
   const suggestions = [
@@ -90,6 +91,34 @@ export default function Dashboard({ onSearch, settings, onOpenSettings, onOpenPa
             Ask technical questions across arXiv papers. Answers are synthesized with dense vector retrieval,
             concurrency guardrails, and verified page-level citations.
           </p>
+        </div>
+
+        {/* Autonomous Research Mode Highlight Banner */}
+        <div className="mb-6 rounded-2xl border border-sky-500/30 bg-gradient-to-r from-sky-500/10 via-slate-900/80 to-blue-500/10 p-4 shadow-lg flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0">
+              <Globe className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-white text-sm">Need Autonomous Academic Search?</span>
+                <span className="rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                  Phase 3 Live
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Explore any scientific question beyond the 3 local papers: automated arXiv, Semantic Scholar & Crossref search with open-access PDF retrieval.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenAutonomous}
+            className="flex items-center gap-1.5 rounded-xl bg-sky-500 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-sky-500/20 hover:bg-sky-400 transition-all shrink-0"
+          >
+            <span>Launch Autonomous Agent</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         {/* Central Search Form */}

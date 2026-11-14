@@ -18,6 +18,11 @@ import {
   AlertTriangle,
   FileText,
   RotateCw,
+  Globe,
+  BookOpen,
+  ExternalLink,
+  Info,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function ChatView({
@@ -27,6 +32,7 @@ export default function ChatView({
   onStopStream,
   onRetryLast,
   settings,
+  setSettings,
 }) {
   const [input, setInput] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
@@ -123,7 +129,22 @@ export default function ChatView({
                 ) : (
                   /* Assistant Markdown Text */
                   <div className="markdown-content text-sm md:text-[15px] leading-relaxed">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        table: ({ node, ...props }) => (
+                          <div className="overflow-x-auto my-3 rounded-lg border border-slate-800 bg-slate-950/40">
+                            <table className="w-full text-left border-collapse text-xs md:text-sm" {...props} />
+                          </div>
+                        ),
+                        th: ({ node, ...props }) => (
+                          <th className="border-b border-slate-800 bg-slate-900/90 px-3 py-2 font-semibold text-slate-200" {...props} />
+                        ),
+                        td: ({ node, ...props }) => (
+                          <td className="border-b border-slate-800/50 px-3 py-2 text-slate-300" {...props} />
+                        ),
+                      }}
+                    >
                       {msg.content}
                     </ReactMarkdown>
                     {msg.isPartial && (
@@ -205,6 +226,86 @@ export default function ChatView({
                   </div>
                 )}
 
+                {/* Papers Consulted in Autonomous Research */}
+                {!isUser && msg.papers_used && msg.papers_used.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <BookOpen className="h-3.5 w-3.5 text-sky-400" />
+                        <span>Academic Literature Ingested ({msg.papers_used.length})</span>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {msg.papers_used.map((paper, pIdx) => {
+                        const isFull = paper.content_type === 'full_text';
+                        return (
+                          <div
+                            key={pIdx}
+                            className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 flex flex-col justify-between space-y-2 hover:border-slate-700 transition-colors"
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                {isFull ? (
+                                  <span className="rounded-sm bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                    Full Text ({paper.page_count}p)
+                                  </span>
+                                ) : (
+                                  <span className="rounded-sm bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                                    Abstract Only
+                                  </span>
+                                )}
+                                {paper.year && (
+                                  <span className="rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400 font-mono">
+                                    {paper.year}
+                                  </span>
+                                )}
+                                {paper.sources && paper.sources.map((s) => (
+                                  <span key={s} className="rounded-sm bg-sky-500/10 text-sky-400 px-1.5 py-0.5 text-[10px] font-mono capitalize">
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                              <p className="text-xs font-semibold text-white line-clamp-2 leading-snug">
+                                {paper.title}
+                              </p>
+                              {paper.authors && paper.authors.length > 0 && (
+                                <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                                  {paper.authors.join(', ')}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800/60">
+                              {paper.url && (
+                                <a
+                                  href={paper.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] text-sky-400 hover:underline"
+                                >
+                                  <span>View Paper</span>
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              )}
+                              {paper.pdf_url && (
+                                <a
+                                  href={paper.pdf_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200 hover:bg-slate-700"
+                                >
+                                  PDF ↗
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Source Citations Section */}
                 {!isUser && msg.citations && msg.citations.length > 0 && (
                   <div className="mt-4 pt-3 border-t border-slate-800/80">
@@ -218,6 +319,10 @@ export default function ChatView({
                     <div className="grid grid-cols-1 gap-2">
                       {msg.citations.map((cit, cIdx) => {
                         const isExpanded = expandedCitations[`${idx}-${cIdx}`];
+                        const isAbstract = cit.evidence_type === 'abstract_only' || cit.page_number === 'Abstract' || cit.is_abstract_only;
+                        const paperName = cit.paper_title || cit.paper_name;
+                        const passageText = cit.evidence_excerpt || cit.source_passage;
+
                         return (
                           <div
                             key={cIdx}
@@ -232,35 +337,70 @@ export default function ChatView({
                                   {cIdx + 1}
                                 </span>
                                 <span className="text-xs font-medium text-slate-200">
-                                  {cit.paper_name}
+                                  {paperName}
                                 </span>
-                                <span className="rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300 font-mono">
-                                  p. {cit.page_number}
-                                </span>
+                                {isAbstract ? (
+                                  <span className="rounded-sm bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 text-[10px] font-mono">
+                                    Abstract
+                                  </span>
+                                ) : (
+                                  <span className="rounded-sm bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300 font-mono">
+                                    p. {cit.page_number}
+                                  </span>
+                                )}
                                 {cit.chunk_id !== undefined && (
                                   <span className="rounded-sm bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-400 font-mono">
                                     chunk #{cit.chunk_id}
                                   </span>
                                 )}
                               </div>
-                              <button className="text-slate-500 hover:text-slate-300">
-                                {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {cit.pdf_url && (
+                                  <a
+                                    href={cit.pdf_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-slate-400 hover:text-sky-400"
+                                    title="Open PDF"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                                <button className="text-slate-500 hover:text-slate-300">
+                                  {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
                             </div>
 
                             {/* Expanded Passage Excerpt */}
-                            {isExpanded && cit.source_passage && (
+                            {isExpanded && passageText && (
                               <div className="mt-2.5 rounded-lg bg-slate-900/90 p-2.5 border border-slate-800 text-xs text-slate-300 font-mono leading-relaxed">
                                 <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1 font-sans">
                                   Retrieved Passage Excerpt:
                                 </p>
-                                <p className="italic">{cit.source_passage}</p>
+                                <p className="italic">{passageText}</p>
                               </div>
                             )}
                           </div>
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* Research Limitations Callout */}
+                {!isUser && msg.limitations && msg.limitations.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 space-y-1">
+                    <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Research Limitations & Evidence Caveats</span>
+                    </div>
+                    <ul className="list-disc pl-5 space-y-0.5 text-amber-200/90">
+                      {msg.limitations.map((lim, lIdx) => (
+                        <li key={lIdx}>{lim}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
@@ -305,8 +445,39 @@ export default function ChatView({
               className="w-full resize-none bg-transparent px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-hidden leading-relaxed disabled:opacity-50"
             />
 
-            <div className="flex items-center justify-between border-t border-slate-800/60 pt-2 px-2 mt-1">
-              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/60 pt-2 px-2 mt-1">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                {/* Engine Mode Toggle */}
+                {setSettings && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        research_mode: prev.research_mode === 'autonomous' ? 'corpus' : 'autonomous',
+                      }))
+                    }
+                    className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold border transition-all ${
+                      settings.research_mode === 'autonomous'
+                        ? 'bg-sky-500/15 text-sky-300 border-sky-500/30 hover:bg-sky-500/25'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                    title="Toggle between Autonomous Live Academic Search and Local 3-Paper RAG"
+                  >
+                    {settings.research_mode === 'autonomous' ? (
+                      <>
+                        <Globe className="h-3 w-3 text-sky-400" />
+                        <span>Autonomous Agent (arXiv+S2+Crossref)</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-3 w-3 text-slate-400" />
+                        <span>Corpus Q&A (3 Papers)</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
                 <span>Top-K: {settings.top_k}</span>
                 <span>•</span>
                 <span>{settings.use_mock ? `Mock (${settings.mock_mode || 'NORMAL'})` : 'Live Groq'}</span>

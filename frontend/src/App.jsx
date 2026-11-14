@@ -3,16 +3,18 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import ChatView from './components/ChatView';
+import AutonomousResearchView from './components/AutonomousResearchView';
 import PapersLibrary from './components/PapersLibrary';
 import ApiStatusView from './components/ApiStatusView';
 import SettingsView from './components/SettingsView';
-import { askQuestion, streamQuestion, fetchHealth } from './services/api';
+import { askQuestion, streamQuestion, fetchHealth, fetchResearchAnswer } from './services/api';
 
 const DEFAULT_SETTINGS = {
   top_k: 5,
   stream: true,
   use_mock: false,
   mock_mode: 'NORMAL',
+  research_mode: 'autonomous', // 'autonomous' | 'corpus'
 };
 
 const STORAGE_KEY_SETTINGS = 'the_relay_settings_v2';
@@ -126,8 +128,65 @@ export default function App() {
     const assistantIndex = messages.length + 1;
     const startTime = performance.now();
 
-    // 1. Streaming Mode (SSE)
-    if (settings.stream) {
+    // 1. Autonomous Academic Research Mode (Searches arXiv, S2, Crossref live)
+    if (settings.research_mode === 'autonomous') {
+      setIsStreaming(true);
+      try {
+        const res = await fetchResearchAnswer({
+          question: questionText,
+          max_papers: 3,
+          sources: ['arxiv', 'semantic_scholar', 'crossref'],
+          top_k_evidence: settings.top_k || 6,
+          use_mock: settings.use_mock,
+        });
+
+        const elapsed = Math.round(performance.now() - startTime);
+        setMessages((prev) => {
+          const updated = [...prev];
+          if (updated[assistantIndex]) {
+            updated[assistantIndex] = {
+              role: 'assistant',
+              content: res.answer,
+              citations: res.citations || [],
+              papers_used: res.papers_used || [],
+              evidence_snippets: res.evidence_snippets || [],
+              limitations: res.limitations || [],
+              status: res.status === 'success' ? 'verified' : (res.status === 'INSUFFICIENT_EVIDENCE' ? 'REFUSAL_VERIFIED' : res.status),
+              validation_status: res.status === 'success' ? 'VERIFIED' : 'UNVERIFIED',
+              input_tokens: res.input_tokens || 0,
+              output_tokens: res.output_tokens || 0,
+              latency_ms: res.execution_time_ms || elapsed,
+              provider: res.provider || (settings.use_mock ? 'mock' : 'groq'),
+              model: res.model,
+              search_queries: res.search_queries || [],
+              sources_queried: res.sources_queried || [],
+              total_papers_found: res.total_papers_found,
+              isPartial: false,
+              isAutonomous: true,
+            };
+          }
+          return updated;
+        });
+      } catch (err) {
+        setMessages((prev) => {
+          const updated = [...prev];
+          if (updated[assistantIndex]) {
+            updated[assistantIndex] = {
+              role: 'assistant',
+              content: '',
+              isPartial: false,
+              isError: true,
+              errorMessage: err.message || 'Error communicating with autonomous research backend',
+            };
+          }
+          return updated;
+        });
+      } finally {
+        setIsStreaming(false);
+      }
+    }
+    // 2. Fixed Local Corpus Q&A (3 Papers) - Streaming Mode (SSE)
+    else if (settings.stream) {
       setIsStreaming(true);
 
       const controller = streamQuestion(
@@ -363,9 +422,15 @@ export default function App() {
             <Dashboard
               onSearch={handleSendMessage}
               settings={settings}
+              setSettings={setSettings}
               onOpenSettings={() => setActiveView('settings')}
               onOpenPapers={() => setActiveView('papers')}
+              onOpenAutonomous={() => setActiveView('autonomous')}
             />
+          )}
+
+          {activeView === 'autonomous' && (
+            <AutonomousResearchView settings={settings} />
           )}
 
           {activeView === 'chat' && (
@@ -376,6 +441,7 @@ export default function App() {
               onStopStream={handleStopStream}
               onRetryLast={handleRetryLast}
               settings={settings}
+              setSettings={setSettings}
             />
           )}
 
